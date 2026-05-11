@@ -29,3 +29,10 @@
 - [x] 홈 화면에 실제 보관 기간과 삭제 시점/효과를 명시하는 사용자 안내를 구현하고 서버 정책·테스트와 맞춤
 - [x] location.getFamilyLocations / pauseSharing / deleteHistory에서 guardian/child 역할 및 accepted 상태 요구사항을 코드에서 명시적으로 검증
 - [x] pause/delete 포함 민감 API 전반의 허용·거부 케이스를 Vitest로 추가해 역할별·accepted 상태별 서버 권한 검증 증명
+- [x] 구글 로그인 버튼이 정상 인증 포털로 이동하지 않는 문제 원인 확인 및 수정
+- [x] 구글 로그인 URL 생성 로직과 온보딩 버튼 동작을 테스트로 검증
+- [x] 구글 로그인 재검증: 인증 포털 URL, provider 힌트, OAuth callback state 교환 흐름을 실제 실패 원인 기준으로 재확인
+- [x] 구글 로그인 수정 후 타입 검사, Vitest, 빌드, 개발 서버 상태 확인까지 완료
+- [x] `client/src/pages/Home.tsx`의 `startSocialLogin`이 `buildSocialLoginUrl()`을 통해 canonical OAuth URL로 이동함을 코드로 명시하고 검증
+- [x] 온보딩 구글 로그인 버튼 클릭 시 provider 쿼리가 제거된 올바른 OAuth URL로 이동하는 컴포넌트 또는 단위 테스트 추가
+- [x] OAuth callback state 파싱과 redirect 계약을 테스트로 검증해 Google 로그인 흐름 재확인 근거 보강
