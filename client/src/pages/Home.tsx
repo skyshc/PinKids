@@ -4,19 +4,24 @@
  * 모든 선택은 “자녀 위치를 빠르게 확인하고 부모가 안심한다”는 철학을 강화해야 한다.
  */
 
+import { useAuth } from "@/_core/hooks/useAuth";
 import { MapView } from "@/components/Map";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { getLoginUrl } from "@/const";
+import { buildSocialLoginUrl, type SocialLoginProvider } from "@/lib/socialLogin";
 import { toast } from "sonner";
 import {
   BellRing,
   CheckCircle2,
   ChevronRight,
+  Chrome,
   Clock3,
   Home as HomeIcon,
   KeyRound,
   LocateFixed,
   LockKeyhole,
+  LogOut,
   MapPin,
   MapPinned,
   MessageCircle,
@@ -89,9 +94,9 @@ const timeline = [
 
 const onboardingSteps = [
   {
-    eyebrow: "1단계 · 보호자 로그인",
-    title: "먼저 보호자 이름으로 안전 공간을 열어요.",
-    description: "실서비스에서는 휴대폰 인증이나 소셜 로그인으로 보호자를 확인합니다. 데모에서는 흐름을 보여주기 위해 이름만 입력합니다.",
+    eyebrow: "1단계 · 간편 소셜 로그인",
+    title: "카카오톡이나 구글 계정으로 빠르게 시작해요.",
+    description: "보호자가 이미 쓰는 계정으로 먼저 로그인한 뒤, 가족 역할과 위치 정보 동의를 차례로 확인합니다. 선택한 소셜 로그인 방식은 인증 포털에 전달됩니다.",
     icon: KeyRound,
   },
   {
@@ -115,16 +120,27 @@ const onboardingSteps = [
 ];
 
 export default function Home() {
+  // The userAuth hooks provides authentication state
+  // To implement login/logout functionality, simply call logout() or redirect to getLoginUrl()
+  let { user, loading, error, isAuthenticated, logout } = useAuth();
+
   const mapReady = useRef(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [guardianName, setGuardianName] = useState("민지 보호자");
   const [familyRole, setFamilyRole] = useState("부모");
   const [locationPermission, setLocationPermission] = useState<"idle" | "granted" | "denied">("idle");
+  const loginProviderLabel = user?.loginMethod === "google" ? "구글" : user?.loginMethod === "kakao" ? "카카오톡" : "소셜";
 
   const currentStep = onboardingSteps[onboardingStep];
   const CurrentStepIcon = currentStep.icon;
   const progressWidth = `${((onboardingStep + 1) / onboardingSteps.length) * 100}%`;
+
+  useEffect(() => {
+    if (user?.name) {
+      setGuardianName(`${user.name} 보호자`);
+    }
+  }, [user?.name]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -225,6 +241,16 @@ export default function Home() {
     setOnboardingStep(step => Math.min(step + 1, onboardingSteps.length - 1));
   };
 
+  const startSocialLogin = (provider: SocialLoginProvider) => {
+    try {
+      window.localStorage.setItem("child-location-preferred-login-provider", provider);
+    } catch {
+      // 저장소가 제한된 환경에서도 인증 이동은 계속 진행한다.
+    }
+
+    window.location.href = buildSocialLoginUrl(getLoginUrl(), provider);
+  };
+
   const completeOnboarding = () => {
     try {
       window.localStorage.setItem("child-location-onboarding-complete", "true");
@@ -282,12 +308,27 @@ export default function Home() {
             <a href="#map" className="hover:underline hover:decoration-[3px] hover:underline-offset-8">위치 보기</a>
             <a href="#how" className="hover:underline hover:decoration-[3px] hover:underline-offset-8">사용 방법</a>
           </div>
-          <Button
-            onClick={() => openOnboarding(0)}
-            className="border-[3px] border-[#17324d] bg-[#17324d] px-5 py-5 text-[#fff7e7] shadow-[5px_5px_0_#f2a37b] hover:bg-[#254462]"
-          >
-시작하기
-          </Button>
+          {isAuthenticated ? (
+            <div className="hidden items-center gap-3 md:flex">
+              <span className="border-[3px] border-[#17324d] bg-[#8fd3b6] px-4 py-2 text-sm font-black shadow-[4px_4px_0_#17324d]">
+                {user?.name || "보호자"}님 로그인 중
+              </span>
+              <Button
+                onClick={() => logout()}
+                variant="outline"
+                className="border-[3px] border-[#17324d] bg-[#fff7e7] px-4 py-5 font-black shadow-[4px_4px_0_#f2a37b] hover:bg-white"
+              >
+                <LogOut className="mr-2 h-4 w-4" /> 로그아웃
+              </Button>
+            </div>
+          ) : (
+            <Button
+              onClick={() => openOnboarding(0)}
+              className="border-[3px] border-[#17324d] bg-[#17324d] px-5 py-5 text-[#fff7e7] shadow-[5px_5px_0_#f2a37b] hover:bg-[#254462]"
+            >
+              소셜 로그인으로 시작
+            </Button>
+          )}
         </nav>
       </header>
 
@@ -510,9 +551,62 @@ export default function Home() {
 
               <div className="mt-8">
                 {onboardingStep === 0 && (
-                  <div className="grid gap-4">
-                    <label className="text-sm font-black" htmlFor="guardian-name">보호자 이름</label>
-                    <div className="flex flex-col gap-3 sm:flex-row">
+                  <div className="grid gap-5">
+                    {loading && (
+                      <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-4 text-sm font-black shadow-[4px_4px_0_#8fd3b6]">
+                        로그인 상태를 확인하고 있습니다.
+                      </div>
+                    )}
+                    {error && (
+                      <div className="border-[3px] border-[#17324d] bg-[#fff0e8] p-4 text-sm font-black text-[#9d3c23] shadow-[4px_4px_0_#f2a37b]">
+                        로그인 상태 확인이 잠시 지연되었습니다. 아래 소셜 로그인으로 다시 시작할 수 있습니다.
+                      </div>
+                    )}
+                    {isAuthenticated ? (
+                      <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-5 shadow-[5px_5px_0_#8fd3b6]">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-[#17324d] bg-[#8fd3b6]">
+                            <CheckCircle2 className="h-7 w-7" />
+                          </span>
+                          <div>
+                            <p className="font-black">{user?.name || "보호자"}님, {loginProviderLabel} 계정 로그인이 완료되었습니다.</p>
+                            <p className="text-sm font-bold text-[#51677a]">이제 가족 역할과 위치 정보 제공 동의를 이어서 설정합니다.</p>
+                          </div>
+                        </div>
+                        <Button onClick={goNextStep} className="mt-5 h-14 w-full border-[3px] border-[#17324d] bg-[#17324d] px-6 font-black text-[#fff7e7] shadow-[5px_5px_0_#f2a37b] hover:bg-[#254462]">
+                          다음 단계로 계속 <ChevronRight className="ml-2 h-5 w-5" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={() => startSocialLogin("kakao")}
+                          className="flex min-h-20 items-center gap-4 border-[3px] border-[#17324d] bg-[#fee500] p-4 text-left shadow-[5px_5px_0_#17324d] transition-all hover:translate-x-1 hover:translate-y-1 hover:shadow-[3px_3px_0_#17324d]"
+                        >
+                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-[3px] border-[#17324d] bg-[#3c1e1e] text-lg font-black text-[#fee500]">K</span>
+                          <span>
+                            <span className="block text-lg font-black">카카오톡으로 3초 가입</span>
+                            <span className="mt-1 block text-xs font-bold text-[#4c3d0d]">카카오 계정으로 보호자 확인</span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => startSocialLogin("google")}
+                          className="flex min-h-20 items-center gap-4 border-[3px] border-[#17324d] bg-[#fffdf5] p-4 text-left shadow-[5px_5px_0_#f2a37b] transition-all hover:translate-x-1 hover:translate-y-1 hover:shadow-[3px_3px_0_#f2a37b]"
+                        >
+                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-[3px] border-[#17324d] bg-white">
+                            <Chrome className="h-6 w-6 text-[#1d8664]" />
+                          </span>
+                          <span>
+                            <span className="block text-lg font-black">구글 계정으로 계속</span>
+                            <span className="mt-1 block text-xs font-bold text-[#51677a]">이메일 입력 없이 바로 로그인</span>
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                    <div className="grid gap-4">
+                      <label className="text-sm font-black" htmlFor="guardian-name">표시할 보호자 이름</label>
                       <div className="flex flex-1 items-center gap-3 border-[3px] border-[#17324d] bg-[#fffdf5] px-4 py-3 shadow-[4px_4px_0_#17324d]">
                         <UserRound className="h-5 w-5 text-[#1d8664]" />
                         <input
@@ -523,11 +617,8 @@ export default function Home() {
                           placeholder="예: 민지 보호자"
                         />
                       </div>
-                      <Button onClick={goNextStep} className="h-14 border-[3px] border-[#17324d] bg-[#17324d] px-6 font-black text-[#fff7e7] shadow-[5px_5px_0_#f2a37b] hover:bg-[#254462]">
-                        로그인 계속하기 <ChevronRight className="ml-2 h-5 w-5" />
-                      </Button>
                     </div>
-                    <p className="border-[3px] border-[#17324d] bg-[#fffdf5] p-4 text-sm font-bold leading-6 shadow-[4px_4px_0_#8fd3b6]">데모에서는 실제 계정을 만들지 않습니다. 실서비스 확장 시에는 인증, 세션, 개인정보 처리방침 동의가 연결됩니다.</p>
+                    <p className="border-[3px] border-[#17324d] bg-[#fffdf5] p-4 text-sm font-bold leading-6 shadow-[4px_4px_0_#8fd3b6]">실제 계정 세션은 서버 기반 인증으로 관리됩니다. 카카오톡·구글 버튼은 인증 포털로 이동하며, 로그인 후 이 화면으로 돌아와 가족 역할과 위치 동의 흐름을 이어갑니다.</p>
                   </div>
                 )}
 
