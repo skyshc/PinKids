@@ -9,6 +9,7 @@ import { MapView } from "@/components/Map";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getLoginUrl } from "@/const";
+import { trpc } from "@/lib/trpc";
 import {
   BROWSER_SETTING_GUIDES,
   LOCATION_PERMISSION_EXPLANATIONS,
@@ -37,12 +38,14 @@ import {
   MapPinned,
   MessageCircle,
   Navigation,
+  PauseCircle,
   Radar,
   RotateCcw,
   School,
   Settings,
   ShieldCheck,
   Smartphone,
+  Trash2,
   UserRound,
   UsersRound,
   X,
@@ -138,6 +141,9 @@ export default function Home() {
   let { user, loading, error, isAuthenticated, logout } = useAuth();
 
   const mapReady = useRef(false);
+  const mapInstanceRef = useRef<google.maps.Map | null>(null);
+  const familyMarkerRefs = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const familyPathRef = useRef<google.maps.Polyline | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [guardianName, setGuardianName] = useState("민지 보호자");
@@ -148,6 +154,39 @@ export default function Home() {
   const loginProviderLabel = user?.loginMethod === "google" ? "구글" : user?.loginMethod === "kakao" ? "카카오톡" : "소셜";
   const locationPanelCopy = getLocationPermissionPanelCopy(locationPermission);
   const isLocationBusy = locationPermission === "checking" || locationPermission === "requesting";
+  const apiFamilyRole = familyRole === "자녀" ? "child" : "guardian";
+  const trpcUtils = trpc.useUtils();
+  const consentStatusQuery = trpc.consent.getStatus.useQuery(undefined, { enabled: isAuthenticated });
+  const familyLocationsQuery = trpc.location.getFamilyLocations.useQuery(undefined, { enabled: isAuthenticated });
+  const grantConsentMutation = trpc.consent.grant.useMutation({
+    onSuccess: async () => {
+      await Promise.all([trpcUtils.consent.getStatus.invalidate(), trpcUtils.family.myMemberships.invalidate()]);
+    },
+  });
+  const revokeConsentMutation = trpc.consent.revoke.useMutation({
+    onSuccess: async () => {
+      await Promise.all([trpcUtils.consent.getStatus.invalidate(), trpcUtils.location.getFamilyLocations.invalidate()]);
+    },
+  });
+  const pauseSharingMutation = trpc.location.pauseSharing.useMutation({
+    onSuccess: async () => {
+      await trpcUtils.location.getFamilyLocations.invalidate();
+    },
+  });
+  const deleteHistoryMutation = trpc.location.deleteHistory.useMutation({
+    onSuccess: async () => {
+      await Promise.all([trpcUtils.consent.getStatus.invalidate(), trpcUtils.location.getFamilyLocations.invalidate()]);
+    },
+  });
+  const updateLocationMutation = trpc.location.updateCurrent.useMutation({
+    onSuccess: async () => {
+      await trpcUtils.location.getFamilyLocations.invalidate();
+    },
+  });
+  const storedFamilyLocations = familyLocationsQuery.data?.locations ?? [];
+  const storedLocationsWithCoordinates = storedFamilyLocations.filter(item => item.location);
+  const hasActiveStoredConsent = consentStatusQuery.data?.active ?? false;
+  const locationRetentionDays = familyLocationsQuery.data?.retentionDays ?? 30;
 
   const currentStep = onboardingSteps[onboardingStep];
   const CurrentStepIcon = currentStep.icon;
@@ -210,6 +249,7 @@ export default function Home() {
   }, [onboardingStep, showOnboarding]);
 
   const handleMapReady = (map: google.maps.Map) => {
+    mapInstanceRef.current = map;
     if (mapReady.current || !window.google) return;
     mapReady.current = true;
 
@@ -234,24 +274,6 @@ export default function Home() {
       ],
     });
 
-    const markerData = [
-      { position: school, title: "지우 · 학교", label: "지우" },
-      { position: academy, title: "하준 · 학원", label: "하준" },
-      { position: home, title: "우리 집", label: "집" },
-    ];
-
-    markerData.forEach(item => {
-      const pin = document.createElement("div");
-      pin.className = "map-pin-marker";
-      pin.innerHTML = `<span>${item.label}</span>`;
-      new window.google!.maps.marker.AdvancedMarkerElement({
-        map,
-        position: item.position,
-        title: item.title,
-        content: pin,
-      });
-    });
-
     new window.google.maps.Circle({
       strokeColor: "#17324d",
       strokeOpacity: 0.85,
@@ -263,21 +285,23 @@ export default function Home() {
       radius: 380,
     });
 
-    new window.google.maps.Polyline({
-      path: [school, academy, home],
-      geodesic: true,
-      strokeColor: "#17324d",
-      strokeOpacity: 0.95,
-      strokeWeight: 4,
-      icons: [
-        {
-          icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 4 },
-          offset: "0",
-          repeat: "20px",
-        },
-      ],
-      map,
-    });
+    if (storedLocationsWithCoordinates.length === 0) {
+      new window.google.maps.Polyline({
+        path: [school, academy, home],
+        geodesic: true,
+        strokeColor: "#17324d",
+        strokeOpacity: 0.5,
+        strokeWeight: 3,
+        icons: [
+          {
+            icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 4 },
+            offset: "0",
+            repeat: "20px",
+          },
+        ],
+        map,
+      });
+    }
   };
 
   const showDemoToast = (message = "데모 웹사이트에서는 실제 위치 공유가 연결되어 있지 않습니다.") => {
@@ -285,6 +309,152 @@ export default function Home() {
       description: "실서비스에서는 보호자 초대, 권한 승인, 실시간 위치 동의 절차가 필요합니다.",
     });
   };
+
+  const saveGrantedLocation = async (position: GeolocationPosition) => {
+    if (!isAuthenticated) {
+      toast("로그인이 먼저 필요합니다.", {
+        description: "위치 동의 기록과 가족 위치 저장은 로그인한 사용자에게만 연결됩니다.",
+      });
+      openOnboarding(0);
+      return;
+    }
+
+    const consentResult = await grantConsentMutation.mutateAsync({
+      displayName: guardianName || user?.name || "보호자",
+      familyRole: apiFamilyRole,
+      permissionState: "granted",
+      consentText: "PinKids에서 가족 구성원이 최신 위치를 확인할 수 있도록 브라우저 위치 정보 제공에 동의합니다.",
+    });
+
+    await updateLocationMutation.mutateAsync({
+      familyId: consentResult.family?.id,
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy ?? null,
+      recordedAt: position.timestamp || Date.now(),
+    });
+  };
+
+  const refreshCurrentLocation = async () => {
+    if (!navigator.geolocation) {
+      toast("위치 권한을 사용할 수 없습니다.", {
+        description: "현재 브라우저에서는 위치 업데이트를 저장할 수 없습니다.",
+      });
+      return;
+    }
+
+    if (!hasActiveStoredConsent) {
+      toast("먼저 위치 정보 제공에 동의해주세요.", {
+        description: "온보딩의 위치 동의 단계에서 동의를 저장한 뒤 현재 위치를 업데이트할 수 있습니다.",
+      });
+      openOnboarding(2);
+      return;
+    }
+
+    setLocationPermission("requesting");
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        void (async () => {
+          try {
+            await updateLocationMutation.mutateAsync({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy: position.coords.accuracy ?? null,
+              recordedAt: position.timestamp || Date.now(),
+            });
+            setLocationPermission("granted");
+            toast("현재 위치가 업데이트되었습니다.", {
+              description: "가족 위치 화면에 저장된 최신 좌표를 반영했습니다.",
+            });
+          } catch {
+            setLocationPermission("denied");
+            toast("현재 위치 저장에 실패했습니다.", {
+              description: "잠시 후 다시 시도해주세요.",
+            });
+          }
+        })();
+      },
+      () => {
+        setLocationPermission("denied");
+        toast("위치 업데이트가 허용되지 않았습니다.", {
+          description: "브라우저 위치 권한을 허용한 뒤 다시 시도해주세요.",
+        });
+      },
+      LOCATION_PERMISSION_REQUEST_OPTIONS,
+    );
+  };
+
+  const revokeStoredConsent = async () => {
+    await revokeConsentMutation.mutateAsync();
+    setLocationPermission("idle");
+    toast("위치 정보 제공 동의가 철회되었습니다.", {
+      description: "저장된 최신 위치 표시는 비활성화되며, 다시 공유하려면 위치 동의를 새로 진행해야 합니다.",
+    });
+  };
+
+  const pauseStoredLocationSharing = async () => {
+    await pauseSharingMutation.mutateAsync();
+    setLocationPermission("idle");
+    toast("위치 공유가 일시 중지되었습니다.", {
+      description: "동의 기록은 보관하지만, 가족 위치 목록에서는 최신 위치가 더 이상 노출되지 않습니다.",
+    });
+  };
+
+  const deleteStoredLocationHistory = async () => {
+    await deleteHistoryMutation.mutateAsync();
+    setLocationPermission("idle");
+    toast("저장된 위치 기록이 삭제되었습니다.", {
+      description: "보관 기간 안내에 따라 현재 계정의 위치 포인트와 활성 동의가 정리되었습니다.",
+    });
+  };
+
+  useEffect(() => {
+    if (!mapInstanceRef.current || !window.google) return;
+    familyMarkerRefs.current.forEach(marker => {
+      marker.map = null;
+    });
+    familyMarkerRefs.current = [];
+
+    if (familyPathRef.current) {
+      familyPathRef.current.setMap(null);
+      familyPathRef.current = null;
+    }
+
+    const bounds = new window.google.maps.LatLngBounds();
+    const path: google.maps.LatLngLiteral[] = [];
+
+    storedFamilyLocations.forEach(item => {
+      if (!item.location) return;
+      const position = { lat: item.location.latitude, lng: item.location.longitude };
+      const pin = document.createElement("div");
+      pin.className = "map-pin-marker";
+      pin.innerHTML = `<span>${item.displayName.slice(0, 2)}</span>`;
+      const marker = new window.google!.maps.marker.AdvancedMarkerElement({
+        map: mapInstanceRef.current,
+        position,
+        title: `${item.displayName} · 저장된 최신 위치`,
+        content: pin,
+      });
+      familyMarkerRefs.current.push(marker);
+      bounds.extend(position);
+      path.push(position);
+    });
+
+    if (path.length >= 2) {
+      familyPathRef.current = new window.google.maps.Polyline({
+        path,
+        geodesic: true,
+        strokeColor: "#f2a37b",
+        strokeOpacity: 0.95,
+        strokeWeight: 5,
+        map: mapInstanceRef.current,
+      });
+    }
+
+    if (path.length > 0) {
+      mapInstanceRef.current.fitBounds(bounds, 72);
+    }
+  }, [storedFamilyLocations]);
 
   const openOnboarding = (step = 0) => {
     setOnboardingStep(step);
@@ -366,12 +536,23 @@ export default function Home() {
     setShowLocationSettingsGuide(false);
 
     navigator.geolocation.getCurrentPosition(
-      () => {
-        setLocationPermission("granted");
-        setLocationPermissionMessage("위치 권한이 허용되었습니다. 다음 단계로 계속할 수 있습니다.");
-        toast("위치 권한이 켜졌습니다.", {
-          description: "실서비스에서는 이 동의 내역과 철회 방법을 함께 제공합니다.",
-        });
+      position => {
+        void (async () => {
+          try {
+            await saveGrantedLocation(position);
+            setLocationPermission("granted");
+            setLocationPermissionMessage("위치 권한과 서비스 동의가 저장되었습니다. 다음 단계로 계속할 수 있습니다.");
+            toast("위치 동의와 현재 위치가 저장되었습니다.", {
+              description: "철회 버튼으로 언제든 위치 공유를 중단할 수 있습니다.",
+            });
+          } catch {
+            setLocationPermission("denied");
+            setLocationPermissionMessage("브라우저 권한은 허용되었지만 서비스 동의 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+            toast("위치 동의 저장에 실패했습니다.", {
+              description: "네트워크 상태를 확인한 뒤 다시 시도해주세요.",
+            });
+          }
+        })();
       },
       () => {
         setLocationPermission("denied");
@@ -521,20 +702,88 @@ export default function Home() {
             <div className="flex flex-col justify-center">
               <p className="mb-4 inline-flex w-fit items-center gap-2 border-[3px] border-[#fff7e7] bg-[#f2a37b] px-4 py-2 text-sm font-black text-[#17324d] shadow-[4px_4px_0_#fff7e7]"><Radar className="h-4 w-4" /> 실시간 위치 화면</p>
               <h2 className="font-display text-4xl leading-tight tracking-[-0.03em] sm:text-5xl">지도 위에 안전 구역과 이동 경로를 함께 표시합니다.</h2>
-              <p className="mt-6 text-base font-medium leading-8 text-[#d9e5df]">이 데모 지도는 서비스 화면 예시입니다. 실제 서비스에서는 자녀와 보호자의 명시적 동의, 권한 관리, 위치 데이터 보안 정책을 연결해야 합니다.</p>
-              <div className="mt-8 space-y-4">
-                {children.map(child => (
-                  <div key={child.name} className="flex items-center justify-between gap-4 border-[3px] border-[#fff7e7] bg-[#fff7e7] p-4 text-[#17324d] shadow-[5px_5px_0_#8fd3b6]">
-                    <div className="flex items-center gap-3">
-                      <span className={`flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-[#17324d] font-black ${child.accent === "mint" ? "bg-[#8fd3b6]" : child.accent === "peach" ? "bg-[#f2a37b]" : "bg-[#f8d9a8]"}`}>{child.name[0]}</span>
-                      <div>
-                        <p className="font-black">{child.name} · {child.place}</p>
-                        <p className="text-xs font-bold text-[#51677a]">{child.status}</p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-black">{child.time}</span>
+              <p className="mt-6 text-base font-medium leading-8 text-[#d9e5df]">로그인한 사용자가 위치 정보 제공에 동의하면 서버에 동의 내역과 최신 좌표가 저장되고, 같은 가족 그룹의 구성원 위치가 이 목록에 표시됩니다.</p>
+              <div className="mt-6 border-[3px] border-[#fff7e7] bg-[#fff7e7] p-4 text-[#17324d] shadow-[5px_5px_0_#8fd3b6]">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-black">저장된 위치 동의 상태</p>
+                    <p className="mt-1 text-xs font-bold text-[#51677a]">
+                      {isAuthenticated ? (hasActiveStoredConsent ? "동의 활성화 · 가족 위치 저장 가능" : "동의 없음 · 위치 저장 전") : "로그인 후 동의 상태를 확인할 수 있습니다."}
+                    </p>
                   </div>
-                ))}
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button
+                      onClick={() => void refreshCurrentLocation()}
+                      disabled={!isAuthenticated || updateLocationMutation.isPending || isLocationBusy}
+                      className="border-[3px] border-[#17324d] bg-[#8fd3b6] font-black text-[#17324d] shadow-[4px_4px_0_#17324d] hover:bg-[#9ee4c6] disabled:opacity-60"
+                    >
+                      현재 위치 업데이트
+                    </Button>
+                    <Button
+                      onClick={() => void pauseStoredLocationSharing()}
+                      disabled={!hasActiveStoredConsent || pauseSharingMutation.isPending}
+                      variant="outline"
+                      className="border-[3px] border-[#17324d] bg-[#fff7e7] font-black shadow-[4px_4px_0_#8fd3b6] hover:bg-white disabled:opacity-60"
+                    >
+                      <PauseCircle className="mr-2 h-4 w-4" /> 공유 일시 중지
+                    </Button>
+                    <Button
+                      onClick={() => void revokeStoredConsent()}
+                      disabled={!hasActiveStoredConsent || revokeConsentMutation.isPending}
+                      variant="outline"
+                      className="border-[3px] border-[#17324d] bg-[#fff7e7] font-black shadow-[4px_4px_0_#f2a37b] hover:bg-white disabled:opacity-60"
+                    >
+                      동의 철회
+                    </Button>
+                    <Button
+                      onClick={() => void deleteStoredLocationHistory()}
+                      disabled={deleteHistoryMutation.isPending}
+                      variant="outline"
+                      className="border-[3px] border-[#17324d] bg-[#fff0e8] font-black text-[#9d3c23] shadow-[4px_4px_0_#17324d] hover:bg-white disabled:opacity-60"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" /> 기록 삭제
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-6 grid gap-3 border-[3px] border-[#fff7e7] bg-[#fff7e7]/10 p-4 text-sm font-bold leading-6 text-[#d9e5df]">
+                <p>
+                  위치 기록 보관 정책: 최신 가족 위치 확인을 위해 좌표 기록은 서버 정책 기준 <strong className="text-[#fff7e7]">{locationRetentionDays}일</strong> 동안 보관하는 것을 전제로 안내합니다. 사용자는 언제든지 공유를 일시 중지하거나 동의를 철회할 수 있습니다.
+                </p>
+                <p>
+                  기록 삭제를 누르면 현재 로그인한 사용자의 저장 좌표가 즉시 삭제되고 가족 위치 목록에서 사라집니다. 동의 철회는 활성 동의 상태를 종료하지만, 별도 삭제 전까지 보관 기간 내 기록이 남을 수 있으므로 민감한 위치 정보는 기록 삭제를 함께 실행하도록 안내합니다.
+                </p>
+              </div>
+              <div className="mt-8 space-y-4">
+                {storedFamilyLocations.length > 0 ? (
+                  storedFamilyLocations.map((member, index) => (
+                    <div key={member.memberId} className="flex items-center justify-between gap-4 border-[3px] border-[#fff7e7] bg-[#fff7e7] p-4 text-[#17324d] shadow-[5px_5px_0_#8fd3b6]">
+                      <div className="flex items-center gap-3">
+                        <span className={`flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-[#17324d] font-black ${index % 3 === 0 ? "bg-[#8fd3b6]" : index % 3 === 1 ? "bg-[#f2a37b]" : "bg-[#f8d9a8]"}`}>{member.displayName.slice(0, 1)}</span>
+                        <div>
+                          <p className="font-black">{member.displayName} · {member.role === "child" ? "자녀" : member.role === "guardian" ? "보호자" : "부모"}</p>
+                          <p className="text-xs font-bold text-[#51677a]">
+                            {member.location ? `동적 지도 마커 표시 중 · 좌표 ${member.location.latitude.toFixed(4)}, ${member.location.longitude.toFixed(4)} · 정확도 ${Math.round(member.location.accuracy ?? 0)}m` : "승인 대기 또는 공유 일시 중지 상태입니다."}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-black">{member.location ? new Date(member.location.recordedAt).toLocaleTimeString() : "대기"}</span>
+                    </div>
+                  ))
+                ) : (
+                  children.map(child => (
+                    <div key={child.name} className="flex items-center justify-between gap-4 border-[3px] border-[#fff7e7] bg-[#fff7e7] p-4 text-[#17324d] shadow-[5px_5px_0_#8fd3b6]">
+                      <div className="flex items-center gap-3">
+                        <span className={`flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-[#17324d] font-black ${child.accent === "mint" ? "bg-[#8fd3b6]" : child.accent === "peach" ? "bg-[#f2a37b]" : "bg-[#f8d9a8]"}`}>{child.name[0]}</span>
+                        <div>
+                          <p className="font-black">{child.name} · {child.place}</p>
+                          <p className="text-xs font-bold text-[#51677a]">{child.status}</p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-black">{child.time}</span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -827,11 +1076,11 @@ export default function Home() {
                         <span className="flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-[#17324d] bg-[#8fd3b6]"><CheckCircle2 className="h-7 w-7" /></span>
                         <div>
                           <p className="font-black">{guardianName || "보호자"}님 설정 완료</p>
-                          <p className="text-sm font-bold text-[#51677a]">역할: {familyRole} · 위치 권한: {getLocationPermissionStatusLabel(locationPermission)}</p>
+                          <p className="text-sm font-bold text-[#51677a]">역할: {familyRole} · 위치 권한: {getLocationPermissionStatusLabel(locationPermission)} · 저장 상태: {hasActiveStoredConsent ? "동의 저장됨" : "동의 미저장"}</p>
                         </div>
                       </div>
                     </div>
-                    <Button onClick={completeOnboarding} className="h-14 border-[3px] border-[#17324d] bg-[#17324d] px-6 font-black text-[#fff7e7] shadow-[5px_5px_0_#f2a37b] hover:bg-[#254462]">
+                    <Button onClick={completeOnboarding} disabled={grantConsentMutation.isPending || updateLocationMutation.isPending} className="h-14 border-[3px] border-[#17324d] bg-[#17324d] px-6 font-black text-[#fff7e7] shadow-[5px_5px_0_#f2a37b] hover:bg-[#254462] disabled:opacity-70">
                       가족 위치 화면으로 이동
                     </Button>
                   </div>

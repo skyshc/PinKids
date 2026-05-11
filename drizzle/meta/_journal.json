@@ -8,6 +8,13 @@
       "when": 1778482790900,
       "tag": "0000_huge_santa_claus",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1778492357251,
+      "tag": "0001_glorious_sleeper",
+      "breakpoints": true
     }
   ]
 }
