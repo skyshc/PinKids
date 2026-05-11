@@ -186,10 +186,13 @@ describe("location consent and family location procedures", () => {
     dbMock.getAcceptedFamilyMemberships.mockResolvedValue([{ familyId: 7, userId: 42, role: "child", inviteStatus: "pending", canShareLocation: true, canViewLocation: false }]);
     await expect(caller.location.updateCurrent({ familyId: 7, latitude: 37.5, longitude: 127 })).rejects.toThrow("Only accepted guardian or child members with sharing permission can update location");
 
-    dbMock.getAcceptedFamilyMemberships.mockResolvedValue([{ familyId: 7, userId: 42, role: "child", inviteStatus: "accepted", canShareLocation: true, canViewLocation: false }]);
-    await expect(caller.location.getFamilyLocations()).rejects.toThrow("Only accepted guardians with viewing permission can read family locations");
+    // 가족 미소속 신규 사용자: 빈 배열 반환
+    dbMock.getAcceptedFamilyMemberships.mockResolvedValue([]);
+    const resultNoFamily = await caller.location.getFamilyLocations();
+    expect(resultNoFamily.locations).toEqual([]);
 
-    dbMock.getAcceptedFamilyMemberships.mockResolvedValue([{ familyId: 7, userId: 42, role: "guardian", inviteStatus: "pending", canShareLocation: true, canViewLocation: true }]);
+    // 가족 내 비권한 사용자: 403 반환
+    dbMock.getAcceptedFamilyMemberships.mockResolvedValue([{ familyId: 7, userId: 42, role: "child", inviteStatus: "accepted", canShareLocation: true, canViewLocation: false }]);
     await expect(caller.location.getFamilyLocations()).rejects.toThrow("Only accepted guardians with viewing permission can read family locations");
 
     dbMock.getAcceptedFamilyMemberships.mockResolvedValue([{ familyId: 7, userId: 42, role: "child", inviteStatus: "pending", canShareLocation: true, canViewLocation: false }]);

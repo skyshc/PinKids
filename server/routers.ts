@@ -175,6 +175,9 @@ export const appRouter = router({
     getFamilyLocations: protectedProcedure.query(async ({ ctx }) => {
       const memberships = await db.getAcceptedFamilyMemberships(ctx.user.id);
       const canViewAnyFamily = memberships.some(member => member.inviteStatus === "accepted" && member.role === "guardian" && member.canViewLocation);
+      if (memberships.length === 0) {
+        return { locations: [], retentionDays: LOCATION_RETENTION_DAYS } as const;
+      }
       if (!canViewAnyFamily) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Only accepted guardians with viewing permission can read family locations" });
       }

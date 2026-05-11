@@ -157,7 +157,11 @@ export default function Home() {
   const apiFamilyRole = familyRole === "자녀" ? "child" : "guardian";
   const trpcUtils = trpc.useUtils();
   const consentStatusQuery = trpc.consent.getStatus.useQuery(undefined, { enabled: isAuthenticated });
-  const familyLocationsQuery = trpc.location.getFamilyLocations.useQuery(undefined, { enabled: isAuthenticated });
+  const familyLocationsQuery = trpc.location.getFamilyLocations.useQuery(undefined, {
+    enabled: isAuthenticated,
+    // 새로 로그인한 사용자는 아직 가족 그룹에 속하지 않아 403 오류가 발생할 수 있으므로, 에러 시 빈 배열 반환
+    retry: false,
+  });
   const grantConsentMutation = trpc.consent.grant.useMutation({
     onSuccess: async () => {
       await Promise.all([trpcUtils.consent.getStatus.invalidate(), trpcUtils.family.myMemberships.invalidate()]);
@@ -187,6 +191,10 @@ export default function Home() {
   const storedLocationsWithCoordinates = storedFamilyLocations.filter(item => item.location);
   const hasActiveStoredConsent = consentStatusQuery.data?.active ?? false;
   const locationRetentionDays = familyLocationsQuery.data?.retentionDays ?? 30;
+  // 새로 로그인한 사용자는 가족 그룹에 속하지 않아 getFamilyLocations가 403을 반환할 수 있음
+  // 이 경우 에러를 무시하고 빈 상태로 표시
+  const familyLocationsError = familyLocationsQuery.error;
+  const isFamilyLocationsNotFound = familyLocationsError?.data?.code === "FORBIDDEN";
 
   const currentStep = onboardingSteps[onboardingStep];
   const CurrentStepIcon = currentStep.icon;

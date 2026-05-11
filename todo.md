@@ -36,3 +36,6 @@
 - [x] `client/src/pages/Home.tsx`의 `startSocialLogin`이 `buildSocialLoginUrl()`을 통해 canonical OAuth URL로 이동함을 코드로 명시하고 검증
 - [x] 온보딩 구글 로그인 버튼 클릭 시 provider 쿼리가 제거된 올바른 OAuth URL로 이동하는 컴포넌트 또는 단위 테스트 추가
 - [x] OAuth callback state 파싱과 redirect 계약을 테스트로 검증해 Google 로그인 흐름 재확인 근거 보강
+- [x] 구글 로그인 중 403 Forbidden 오류 진단 및 원인 파악
+- [x] 개발 서버 상태, 로그인 URL, OAuth 콜백 라우트 재검증
+- [x] 403 오류 수정 및 테스트 검증
