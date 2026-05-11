@@ -1,3 +1,8 @@
+/*
+ * Design reminder: 따뜻한 네오-브루탈리즘 기반 가족 안전 서비스.
+ * 크림색 종이 질감, 잉크 네이비, 민트 안전 신호, 살구색 강조, 굵은 경계와 tactile shadow를 전역 스타일의 기준으로 삼는다.
+ */
+
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -43,82 +48,87 @@
 }
 
 :root {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-600);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.98 0.001 286.375);
-  --secondary-foreground: oklch(0.4 0.015 65);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.141 0.005 285.823);
-  --destructive: oklch(0.577 0.245 27.325);
+  --radius: 0.35rem;
+  --background: oklch(0.982 0.025 86.8);
+  --foreground: oklch(0.255 0.055 246.6);
+  --card: oklch(0.995 0.012 86.4);
+  --card-foreground: oklch(0.255 0.055 246.6);
+  --popover: oklch(0.995 0.012 86.4);
+  --popover-foreground: oklch(0.255 0.055 246.6);
+  --primary: oklch(0.255 0.055 246.6);
+  --primary-foreground: oklch(0.982 0.025 86.8);
+  --secondary: oklch(0.9 0.053 153.5);
+  --secondary-foreground: oklch(0.255 0.055 246.6);
+  --muted: oklch(0.931 0.031 84.1);
+  --muted-foreground: oklch(0.47 0.042 246.6);
+  --accent: oklch(0.811 0.096 55.2);
+  --accent-foreground: oklch(0.255 0.055 246.6);
+  --destructive: oklch(0.61 0.19 28.2);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+  --border: oklch(0.255 0.055 246.6);
+  --input: oklch(0.255 0.055 246.6);
+  --ring: oklch(0.67 0.106 158.4);
+  --chart-1: oklch(0.67 0.106 158.4);
+  --chart-2: oklch(0.811 0.096 55.2);
+  --chart-3: oklch(0.255 0.055 246.6);
+  --chart-4: oklch(0.871 0.073 80.2);
+  --chart-5: oklch(0.61 0.19 28.2);
+  --sidebar: oklch(0.982 0.025 86.8);
+  --sidebar-foreground: oklch(0.255 0.055 246.6);
+  --sidebar-primary: oklch(0.255 0.055 246.6);
+  --sidebar-primary-foreground: oklch(0.982 0.025 86.8);
+  --sidebar-accent: oklch(0.9 0.053 153.5);
+  --sidebar-accent-foreground: oklch(0.255 0.055 246.6);
+  --sidebar-border: oklch(0.255 0.055 246.6);
+  --sidebar-ring: oklch(0.67 0.106 158.4);
 }
 
 .dark {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
+  --background: oklch(0.19 0.045 246.6);
+  --foreground: oklch(0.962 0.027 86.8);
+  --card: oklch(0.245 0.049 246.6);
+  --card-foreground: oklch(0.962 0.027 86.8);
+  --popover: oklch(0.245 0.049 246.6);
+  --popover-foreground: oklch(0.962 0.027 86.8);
+  --primary: oklch(0.73 0.115 158.4);
+  --primary-foreground: oklch(0.19 0.045 246.6);
+  --secondary: oklch(0.31 0.052 246.6);
+  --secondary-foreground: oklch(0.962 0.027 86.8);
+  --muted: oklch(0.31 0.052 246.6);
+  --muted-foreground: oklch(0.78 0.027 86.8);
+  --accent: oklch(0.77 0.117 55.2);
+  --accent-foreground: oklch(0.19 0.045 246.6);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  --border: oklch(0.962 0.027 86.8);
+  --input: oklch(0.962 0.027 86.8 / 18%);
+  --ring: oklch(0.73 0.115 158.4);
+  --chart-1: oklch(0.73 0.115 158.4);
+  --chart-2: oklch(0.77 0.117 55.2);
+  --chart-3: oklch(0.962 0.027 86.8);
+  --chart-4: oklch(0.55 0.081 246.6);
+  --chart-5: oklch(0.704 0.191 22.216);
+  --sidebar: oklch(0.19 0.045 246.6);
+  --sidebar-foreground: oklch(0.962 0.027 86.8);
+  --sidebar-primary: oklch(0.73 0.115 158.4);
+  --sidebar-primary-foreground: oklch(0.19 0.045 246.6);
+  --sidebar-accent: oklch(0.31 0.052 246.6);
+  --sidebar-accent-foreground: oklch(0.962 0.027 86.8);
+  --sidebar-border: oklch(0.962 0.027 86.8 / 18%);
+  --sidebar-ring: oklch(0.73 0.115 158.4);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-background text-foreground;
+    font-family: "Noto Sans KR", system-ui, sans-serif;
+    text-rendering: geometricPrecision;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -134,24 +144,11 @@
 }
 
 @layer components {
-  /**
-   * Custom container utility that centers content and adds responsive padding.
-   *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
-   * Usage: <div className="container">...</div>
-   *
-   * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
-   */
   .container {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
+    padding-left: 1rem;
     padding-right: 1rem;
   }
 
@@ -160,18 +157,90 @@
     min-width: 0;
   }
 
+  .font-display {
+    font-family: "Black Han Sans", "Noto Sans KR", system-ui, sans-serif;
+    font-weight: 400;
+  }
+
+  .paper-grain {
+    position: relative;
+  }
+
+  .paper-grain::before {
+    content: "";
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    opacity: 0.12;
+    background-image:
+      radial-gradient(circle at 25% 20%, rgba(23, 50, 77, 0.15) 0 1px, transparent 1px),
+      radial-gradient(circle at 80% 40%, rgba(242, 163, 123, 0.16) 0 1px, transparent 1px),
+      linear-gradient(120deg, rgba(255, 255, 255, 0.3), rgba(23, 50, 77, 0.05));
+    background-size: 17px 17px, 23px 23px, 100% 100%;
+    mix-blend-mode: multiply;
+  }
+
+  .paper-grain > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .map-pin-marker {
+    display: grid;
+    place-items: center;
+    min-width: 54px;
+    height: 42px;
+    padding: 0 10px;
+    border: 3px solid #17324d;
+    background: #8fd3b6;
+    color: #17324d;
+    font-family: "Noto Sans KR", system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 900;
+    box-shadow: 4px 4px 0 #17324d;
+    transform: rotate(-2deg);
+  }
+
+  .map-pin-marker::after {
+    content: "";
+    position: absolute;
+    bottom: -10px;
+    width: 16px;
+    height: 16px;
+    border-right: 3px solid #17324d;
+    border-bottom: 3px solid #17324d;
+    background: #8fd3b6;
+    transform: rotate(45deg);
+  }
+
   @media (min-width: 640px) {
     .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
+      padding-left: 1.5rem;
       padding-right: 1.5rem;
     }
   }
 
   @media (min-width: 1024px) {
     .container {
-      padding-left: 2rem; /* 32px - desktop padding */
+      padding-left: 2rem;
       padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
+      max-width: 1280px;
     }
   }
+}
+
+@keyframes pulse-safety {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.45);
+    opacity: 0.55;
+  }
+}
+
+.pulse-dot {
+  animation: pulse-safety 2.4s ease-in-out infinite;
 }
