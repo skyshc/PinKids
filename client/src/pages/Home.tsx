@@ -344,7 +344,7 @@ export default function Home() {
               </div>
               <h1 className="font-display text-5xl leading-[1.02] tracking-[-0.04em] sm:text-6xl lg:text-7xl">
                 아이의 위치를
-                <span className="block text-[#1d8664]">쉽고 따뜻하게</span>
+                <span className="block text-[#1d8664]">쉽고 빠르게</span>
                 확인하세요.
               </h1>
               <p className="mt-7 max-w-xl text-lg font-medium leading-8 text-[#314b62]">

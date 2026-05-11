@@ -9,3 +9,4 @@
 - [x] 체크포인트 저장 후 사용자에게 전달
 - [x] GitHub 원격 저장소 연결 및 현재 소스 커밋 준비
 - [x] 제공된 GitHub 저장소 https://github.com/skyshc/PinKids.git 에 원격 연결 후 커밋 및 푸시
+- [x] 메인 히어로 문구 ‘쉽고 따뜻하게’를 ‘쉽고 빠르게’로 변경
