@@ -9,9 +9,20 @@ import { MapView } from "@/components/Map";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getLoginUrl } from "@/const";
+import {
+  BROWSER_SETTING_GUIDES,
+  LOCATION_PERMISSION_EXPLANATIONS,
+  LOCATION_PERMISSION_REQUEST_OPTIONS,
+  getLocationPermissionPanelCopy,
+  getLocationPermissionStatusLabel,
+  mapBrowserPermissionState,
+  queryGeolocationPermission,
+  type LocationPermissionUiState,
+} from "@/lib/locationPermission";
 import { buildSocialLoginUrl, type SocialLoginProvider } from "@/lib/socialLogin";
 import { toast } from "sonner";
 import {
+  AlertTriangle,
   BellRing,
   CheckCircle2,
   ChevronRight,
@@ -27,7 +38,9 @@ import {
   MessageCircle,
   Navigation,
   Radar,
+  RotateCcw,
   School,
+  Settings,
   ShieldCheck,
   Smartphone,
   UserRound,
@@ -129,8 +142,12 @@ export default function Home() {
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [guardianName, setGuardianName] = useState("민지 보호자");
   const [familyRole, setFamilyRole] = useState("부모");
-  const [locationPermission, setLocationPermission] = useState<"idle" | "granted" | "denied">("idle");
+  const [locationPermission, setLocationPermission] = useState<LocationPermissionUiState>("idle");
+  const [locationPermissionMessage, setLocationPermissionMessage] = useState("");
+  const [showLocationSettingsGuide, setShowLocationSettingsGuide] = useState(false);
   const loginProviderLabel = user?.loginMethod === "google" ? "구글" : user?.loginMethod === "kakao" ? "카카오톡" : "소셜";
+  const locationPanelCopy = getLocationPermissionPanelCopy(locationPermission);
+  const isLocationBusy = locationPermission === "checking" || locationPermission === "requesting";
 
   const currentStep = onboardingSteps[onboardingStep];
   const CurrentStepIcon = currentStep.icon;
@@ -154,6 +171,43 @@ export default function Home() {
 
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!showOnboarding || onboardingStep !== 2) return;
+    if (locationPermission === "granted" || locationPermission === "requesting") return;
+
+    let isMounted = true;
+
+    const checkPermission = async () => {
+      if (!navigator.geolocation) {
+        if (!isMounted) return;
+        setLocationPermission("unsupported");
+        setLocationPermissionMessage("이 브라우저에서는 위치 권한 요청을 사용할 수 없습니다. 위치 없이 데모를 계속할 수 있습니다.");
+        return;
+      }
+
+      setLocationPermission("checking");
+      const browserState = await queryGeolocationPermission();
+      if (!isMounted) return;
+
+      const nextState = mapBrowserPermissionState(browserState);
+      setLocationPermission(nextState);
+      setLocationPermissionMessage(
+        browserState === "denied"
+          ? "브라우저가 이미 위치 권한을 차단했습니다. 아래 설정 안내를 확인한 뒤 다시 시도해주세요."
+          : browserState === "granted"
+            ? "이미 이 사이트의 위치 권한이 허용되어 있습니다."
+            : "아직 위치 권한을 요청하지 않았습니다. 안내를 확인한 뒤 직접 요청할 수 있습니다.",
+      );
+      setShowLocationSettingsGuide(browserState === "denied");
+    };
+
+    void checkPermission();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [onboardingStep, showOnboarding]);
 
   const handleMapReady = (map: google.maps.Map) => {
     if (mapReady.current || !window.google) return;
@@ -264,32 +318,69 @@ export default function Home() {
     window.setTimeout(() => document.getElementById("map")?.scrollIntoView({ behavior: "smooth" }), 150);
   };
 
-  const requestLocationConsent = () => {
+  const checkLocationPermissionAgain = async () => {
     if (!navigator.geolocation) {
-      setLocationPermission("denied");
-      toast("이 브라우저에서는 위치 권한 요청을 사용할 수 없습니다.", {
-        description: "데모 흐름은 계속 진행할 수 있습니다.",
-      });
-      goNextStep();
+      setLocationPermission("unsupported");
+      setLocationPermissionMessage("이 브라우저에서는 위치 권한 요청을 사용할 수 없습니다. 위치 없이 데모를 계속할 수 있습니다.");
       return;
     }
+
+    setLocationPermission("checking");
+    const browserState = await queryGeolocationPermission();
+    const nextState = mapBrowserPermissionState(browserState);
+
+    setLocationPermission(nextState);
+    setShowLocationSettingsGuide(browserState === "denied");
+    setLocationPermissionMessage(
+      browserState === "denied"
+        ? "아직 브라우저에서 위치 권한이 차단되어 있습니다. 설정을 허용으로 바꾼 뒤 다시 확인해주세요."
+        : browserState === "granted"
+          ? "위치 권한이 허용된 상태입니다. 다음 단계로 계속할 수 있습니다."
+          : "권한 요청이 가능한 상태입니다. 아래 버튼으로 브라우저 권한 창을 열 수 있습니다.",
+    );
+  };
+
+  const requestLocationConsent = async () => {
+    if (!navigator.geolocation) {
+      setLocationPermission("unsupported");
+      setLocationPermissionMessage("이 브라우저에서는 위치 권한 요청을 사용할 수 없습니다. 위치 없이 데모를 계속할 수 있습니다.");
+      toast("위치 권한 요청을 사용할 수 없습니다.", {
+        description: "가족 그룹 생성과 데모 탐색은 계속할 수 있습니다.",
+      });
+      return;
+    }
+
+    const browserState = await queryGeolocationPermission();
+    if (browserState === "denied") {
+      setLocationPermission("blocked");
+      setShowLocationSettingsGuide(true);
+      setLocationPermissionMessage("브라우저가 이미 위치 권한을 차단했습니다. 설정 안내를 확인한 뒤 권한 다시 확인을 눌러주세요.");
+      toast("브라우저 설정 변경이 필요합니다.", {
+        description: "주소창 또는 브라우저 설정에서 PinKids 위치 권한을 허용해주세요.",
+      });
+      return;
+    }
+
+    setLocationPermission("requesting");
+    setLocationPermissionMessage("브라우저 권한 창이 열리면 ‘허용’을 선택해주세요.");
+    setShowLocationSettingsGuide(false);
 
     navigator.geolocation.getCurrentPosition(
       () => {
         setLocationPermission("granted");
-        toast("위치 정보 제공에 동의했습니다.", {
+        setLocationPermissionMessage("위치 권한이 허용되었습니다. 다음 단계로 계속할 수 있습니다.");
+        toast("위치 권한이 켜졌습니다.", {
           description: "실서비스에서는 이 동의 내역과 철회 방법을 함께 제공합니다.",
         });
-        goNextStep();
       },
       () => {
         setLocationPermission("denied");
+        setLocationPermissionMessage("권한을 허용하지 않아도 데모 탐색은 계속할 수 있습니다. 필요하면 다시 요청할 수 있습니다.");
         toast("위치 권한이 허용되지 않았습니다.", {
-          description: "권한을 거절해도 가족 초대와 데모 탐색은 계속할 수 있습니다.",
+          description: "실시간 위치 알림은 나중에 권한을 허용한 뒤 사용할 수 있습니다.",
         });
-        goNextStep();
       },
-      { enableHighAccuracy: false, timeout: 7000, maximumAge: 60000 },
+      LOCATION_PERMISSION_REQUEST_OPTIONS,
     );
   };
 
@@ -645,25 +736,85 @@ export default function Home() {
                 )}
 
                 {onboardingStep === 2 && (
-                  <div className="grid gap-4">
+                  <div className="grid gap-5">
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-5 shadow-[5px_5px_0_#17324d]">
                         <ShieldCheck className="mb-4 h-8 w-8 text-[#1d8664]" />
                         <p className="font-black">동의 전에는 위치를 표시하지 않음</p>
-                        <p className="mt-2 text-sm font-bold leading-6 text-[#51677a]">위치 정보는 사용자가 명확히 허용한 뒤에만 요청됩니다.</p>
+                        <p className="mt-2 text-sm font-bold leading-6 text-[#51677a]">PinKids는 사용자가 직접 버튼을 누른 뒤에만 브라우저 위치 권한 창을 띄웁니다.</p>
                       </div>
                       <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-5 shadow-[5px_5px_0_#f2a37b]">
                         <LockKeyhole className="mb-4 h-8 w-8 text-[#d96d45]" />
-                        <p className="font-black">언제든 철회 가능</p>
-                        <p className="mt-2 text-sm font-bold leading-6 text-[#51677a]">브라우저 설정 또는 서비스 설정에서 권한을 다시 바꿀 수 있습니다.</p>
+                        <p className="font-black">거절해도 계속 이용 가능</p>
+                        <p className="mt-2 text-sm font-bold leading-6 text-[#51677a]">권한을 거절해도 가족 그룹 생성과 데모 지도 확인은 계속할 수 있습니다.</p>
                       </div>
                     </div>
+
+                    <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-5 shadow-[6px_6px_0_#17324d]">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                        <div className="flex gap-4">
+                          <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[3px] border-[#17324d] ${locationPermission === "granted" ? "bg-[#8fd3b6]" : locationPermission === "blocked" || locationPermission === "unsupported" ? "bg-[#f2a37b]" : "bg-[#f8d9a8]"}`}>
+                            {locationPermission === "granted" ? <CheckCircle2 className="h-7 w-7" /> : <AlertTriangle className="h-7 w-7" />}
+                          </span>
+                          <div>
+                            <p className="text-xs font-black text-[#1d8664]">현재 상태 · {getLocationPermissionStatusLabel(locationPermission)}</p>
+                            <p className="mt-1 text-lg font-black">{locationPanelCopy.title}</p>
+                            <p className="mt-2 text-sm font-bold leading-6 text-[#51677a]">{locationPermissionMessage || locationPanelCopy.description}</p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={checkLocationPermissionAgain}
+                          variant="outline"
+                          className="h-11 shrink-0 border-[3px] border-[#17324d] bg-[#fff7e7] px-4 font-black shadow-[4px_4px_0_#f2a37b] hover:bg-white"
+                          disabled={isLocationBusy}
+                        >
+                          <RotateCcw className="mr-2 h-4 w-4" /> 권한 다시 확인
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="border-[3px] border-[#17324d] bg-[#fff7e7] p-5 shadow-[5px_5px_0_#8fd3b6]">
+                      <p className="mb-3 font-black">위치 권한을 요청하기 전 확인사항</p>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        {LOCATION_PERMISSION_EXPLANATIONS.map(item => (
+                          <div key={item} className="border-[3px] border-[#17324d] bg-[#fffdf5] p-4 text-sm font-bold leading-6 shadow-[3px_3px_0_#17324d]">
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {(showLocationSettingsGuide || locationPermission === "blocked") && (
+                      <div className="border-[3px] border-[#17324d] bg-[#fff0e8] p-5 shadow-[5px_5px_0_#f2a37b]">
+                        <div className="mb-4 flex items-center gap-3">
+                          <Settings className="h-6 w-6 text-[#d96d45]" />
+                          <div>
+                            <p className="font-black">브라우저 설정에서 다시 허용하는 방법</p>
+                            <p className="text-sm font-bold text-[#716052]">설정을 바꾼 뒤 이 화면의 ‘권한 다시 확인’을 눌러주세요.</p>
+                          </div>
+                        </div>
+                        <div className="grid gap-3">
+                          {BROWSER_SETTING_GUIDES.map(guide => (
+                            <div key={guide.environment} className="border-[3px] border-[#17324d] bg-[#fffdf5] p-4 text-sm leading-6 shadow-[3px_3px_0_#17324d]">
+                              <p className="font-black">{guide.environment}</p>
+                              <p className="mt-1 font-bold text-[#51677a]">{guide.steps}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex flex-col gap-3 sm:flex-row">
-                      <Button onClick={requestLocationConsent} className="h-14 flex-1 border-[3px] border-[#17324d] bg-[#8fd3b6] px-6 font-black text-[#17324d] shadow-[5px_5px_0_#17324d] hover:bg-[#9ee4c6]">
-                        위치 제공에 동의하고 계속
+                      <Button
+                        onClick={requestLocationConsent}
+                        className="h-14 flex-1 border-[3px] border-[#17324d] bg-[#8fd3b6] px-6 font-black text-[#17324d] shadow-[5px_5px_0_#17324d] hover:bg-[#9ee4c6] disabled:opacity-70"
+                        disabled={isLocationBusy || locationPermission === "blocked" || locationPermission === "unsupported"}
+                      >
+                        {locationPermission === "denied" ? "위치 권한 다시 요청" : "위치 권한 요청하기"}
                       </Button>
-                      <Button onClick={goNextStep} variant="outline" className="h-14 flex-1 border-[3px] border-[#17324d] bg-[#fff7e7] px-6 font-black shadow-[5px_5px_0_#f2a37b] hover:bg-white">
-                        나중에 설정
+                      <Button onClick={goNextStep} className="h-14 flex-1 border-[3px] border-[#17324d] bg-[#17324d] px-6 font-black text-[#fff7e7] shadow-[5px_5px_0_#f2a37b] hover:bg-[#254462]">
+                        {locationPermission === "granted" ? "권한 확인 후 계속" : "나중에 설정하고 계속"}
                       </Button>
                     </div>
                   </div>
@@ -676,7 +827,7 @@ export default function Home() {
                         <span className="flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-[#17324d] bg-[#8fd3b6]"><CheckCircle2 className="h-7 w-7" /></span>
                         <div>
                           <p className="font-black">{guardianName || "보호자"}님 설정 완료</p>
-                          <p className="text-sm font-bold text-[#51677a]">역할: {familyRole} · 위치 권한: {locationPermission === "granted" ? "동의됨" : locationPermission === "denied" ? "나중에 설정" : "선택 전"}</p>
+                          <p className="text-sm font-bold text-[#51677a]">역할: {familyRole} · 위치 권한: {getLocationPermissionStatusLabel(locationPermission)}</p>
                         </div>
                       </div>
                     </div>
