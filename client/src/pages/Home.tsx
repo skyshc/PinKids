@@ -220,9 +220,30 @@ export default function Home() {
     }
   }, [user?.name]);
 
+  // 위치 변경 감지를 위한 ref (이전 위치 저장)
+  const lastLocationRef = useRef<{ lat: number; lng: number } | null>(null);
+  const LOCATION_CHANGE_THRESHOLD = 10; // 10미터 이상 변경 시만 업로드
+
+  // 두 좌표 사이의 거리 계산 (Haversine formula)
+  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+    const R = 6371000; // 지구 반지름 (미터)
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // 거리 (미터)
+  };
+
   // 로그인 후 5분마다 현재 위치를 자동으로 감지하고 업로드
   useEffect(() => {
     if (!isAuthenticated || !user?.id) return;
+    // 온보딩 완료 전에는 위치 추적 시작 안 함
+    if (showOnboarding) {
+      console.info("Location tracking skipped: onboarding in progress");
+      return;
+    }
     // Phase 1-1: 위치 동의 확인 - 미동의 사용자는 위치 추적 안 함
     if (!hasActiveStoredConsent) {
       console.info("Location tracking skipped: no active consent");
@@ -243,6 +264,22 @@ export default function Home() {
           const { latitude, longitude, accuracy } = position.coords;
           const recordedAt = new Date().getTime();
           
+          // 위치 변경 감지: 이전 위치와 비교해서 변경되었을 때만 업로드
+          if (lastLocationRef.current) {
+            const distance = calculateDistance(
+              lastLocationRef.current.lat,
+              lastLocationRef.current.lng,
+              latitude,
+              longitude
+            );
+            if (distance < LOCATION_CHANGE_THRESHOLD) {
+              console.info(`Location change too small (${distance.toFixed(1)}m < ${LOCATION_CHANGE_THRESHOLD}m), skipping upload`);
+              return;
+            }
+          }
+          
+          // 위치 업로드
+          lastLocationRef.current = { lat: latitude, lng: longitude };
           updateLocationMutation.mutate({
             latitude,
             longitude,
@@ -325,6 +362,13 @@ export default function Home() {
   const handleMapReady = (map: google.maps.Map) => {
     mapInstanceRef.current = map;
     if (mapReady.current || !window.google) return;
+    
+    // 온보딩 완료 후에만 마커 표시
+    if (showOnboarding) {
+      console.info("Map markers skipped: onboarding in progress");
+      return;
+    }
+    
     mapReady.current = true;
 
     const school = { lat: 37.5668, lng: 126.9786 };
@@ -569,19 +613,27 @@ export default function Home() {
       return;
     }
 
-    setLocationPermission("checking");
-    const browserState = await queryGeolocationPermission();
-    const nextState = mapBrowserPermissionState(browserState);
+    try {
+      setLocationPermission("checking");
+      setLocationPermissionMessage("브라우저 권한 상태를 확인하고 있습니다...");
+      
+      const browserState = await queryGeolocationPermission();
+      const nextState = mapBrowserPermissionState(browserState);
 
-    setLocationPermission(nextState);
-    setShowLocationSettingsGuide(browserState === "denied");
-    setLocationPermissionMessage(
-      browserState === "denied"
-        ? "아직 브라우저에서 위치 권한이 차단되어 있습니다. 설정을 허용으로 바꾼 뒤 다시 확인해주세요."
-        : browserState === "granted"
-          ? "위치 권한이 허용된 상태입니다. 다음 단계로 계속할 수 있습니다."
-          : "권한 요청이 가능한 상태입니다. 아래 버튼으로 브라우저 권한 창을 열 수 있습니다.",
-    );
+      setLocationPermission(nextState);
+      setShowLocationSettingsGuide(browserState === "denied");
+      setLocationPermissionMessage(
+        browserState === "denied"
+          ? "아직 브라우저에서 위치 권한이 차단되어 있습니다. 설정을 허용으로 바꾼 뒤 다시 확인해주세요."
+          : browserState === "granted"
+            ? "위치 권한이 허용된 상태입니다. 다음 단계로 계속할 수 있습니다."
+            : "권한 요청이 가능한 상태입니다. 아래 버튼으로 브라우저 권한 창을 열 수 있습니다.",
+      );
+    } catch (error) {
+      console.error("권한 확인 중 오류:", error);
+      setLocationPermission("denied");
+      setLocationPermissionMessage("권한 상태를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.");
+    }
   };
 
   const requestLocationConsent = async () => {
@@ -594,49 +646,77 @@ export default function Home() {
       return;
     }
 
-    const browserState = await queryGeolocationPermission();
-    if (browserState === "denied") {
-      setLocationPermission("blocked");
-      setShowLocationSettingsGuide(true);
-      setLocationPermissionMessage("브라우저가 이미 위치 권한을 차단했습니다. 설정 안내를 확인한 뒤 권한 다시 확인을 눌러주세요.");
-      toast("브라우저 설정 변경이 필요합니다.", {
-        description: "주소창 또는 브라우저 설정에서 PinKids 위치 권한을 허용해주세요.",
-      });
-      return;
-    }
+    try {
+      setLocationPermission("requesting");
+      setLocationPermissionMessage("브라우저 권한 상태를 확인하고 있습니다...");
+      setShowLocationSettingsGuide(false);
 
-    setLocationPermission("requesting");
-    setLocationPermissionMessage("브라우저 권한 창이 열리면 ‘허용’을 선택해주세요.");
-    setShowLocationSettingsGuide(false);
-
-    navigator.geolocation.getCurrentPosition(
-      position => {
-        void (async () => {
-          try {
-            await saveGrantedLocation(position);
-            setLocationPermission("granted");
-            setLocationPermissionMessage("위치 권한과 서비스 동의가 저장되었습니다. 다음 단계로 계속할 수 있습니다.");
-            toast("위치 동의와 현재 위치가 저장되었습니다.", {
-              description: "철회 버튼으로 언제든 위치 공유를 중단할 수 있습니다.",
-            });
-          } catch {
-            setLocationPermission("denied");
-            setLocationPermissionMessage("브라우저 권한은 허용되었지만 서비스 동의 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
-            toast("위치 동의 저장에 실패했습니다.", {
-              description: "네트워크 상태를 확인한 뒤 다시 시도해주세요.",
-            });
-          }
-        })();
-      },
-      () => {
-        setLocationPermission("denied");
-        setLocationPermissionMessage("권한을 허용하지 않아도 데모 탐색은 계속할 수 있습니다. 필요하면 다시 요청할 수 있습니다.");
-        toast("위치 권한이 허용되지 않았습니다.", {
-          description: "실시간 위치 알림은 나중에 권한을 허용한 뒤 사용할 수 있습니다.",
+      const browserState = await queryGeolocationPermission();
+      if (browserState === "denied") {
+        setLocationPermission("blocked");
+        setShowLocationSettingsGuide(true);
+        setLocationPermissionMessage("브라우저가 이미 위치 권한을 차단했습니다. 설정 안내를 확인한 뒤 권한 다시 확인을 누르르주세요.");
+        toast("브라우저 설정 변경이 아른 가능성 있습니다.", {
+          description: "주소창 또는 브라우저 설정에서 PinKids 위치 권한을 허용해주세요.",
         });
-      },
-      LOCATION_PERMISSION_REQUEST_OPTIONS,
-    );
+        return;
+      }
+
+      setLocationPermissionMessage("브라우저 권한 창이 열리면 '허용'을 선택해주세요.");
+
+      return new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          setLocationPermission("denied");
+          setLocationPermissionMessage("권한 요청 시간이 초과되었습니다. 다시 시도해주세요.");
+          toast("권한 요청 시간 초과", {
+            description: "브라우저 권한 창이 나타나지 않았습니다. 다시 시도해주세요.",
+          });
+          resolve();
+        }, 30000); // 30초 타임아웃
+
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            clearTimeout(timeout);
+            void (async () => {
+              try {
+                await saveGrantedLocation(position);
+                setLocationPermission("granted");
+                setLocationPermissionMessage("위치 권한과 서비스 동의가 저장되었습니다. 다음 단계로 계속할 수 있습니다.");
+                toast("위치 동의와 현재 위치가 저장되었습니다.", {
+                  description: "총회 버튼으로 언제든 위치 공유를 중단할 수 있습니다.",
+                });
+              } catch (error) {
+                console.error("위치 저장 실패:", error);
+                setLocationPermission("denied");
+                setLocationPermissionMessage("브라우저 권한은 허용되었지만 서비스 동의 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
+                toast("위치 동의 저장에 실패했습니다.", {
+                  description: "네트워크 상태를 확인한 뒤 다시 시도해주세요.",
+                });
+              }
+              resolve();
+            })();
+          },
+          (error) => {
+            clearTimeout(timeout);
+            console.error("위치 권한 거부:", error);
+            setLocationPermission("denied");
+            setLocationPermissionMessage("권한을 허용하지 않아도 데모 탐색은 계속할 수 있습니다. 아래 버튼으로 다시 시도할 수 있습니다.");
+            toast("위치 권한이 허용되지 않았습니다.", {
+              description: "실시간 위치 알림은 나중에 권한을 허용한 뒤 사용할 수 있습니다.",
+            });
+            resolve();
+          },
+          LOCATION_PERMISSION_REQUEST_OPTIONS,
+        );
+      });
+    } catch (error) {
+      console.error("위치 권한 요청 중 오류:", error);
+      setLocationPermission("denied");
+      setLocationPermissionMessage("위치 권한 요청 중 오류가 발생했습니다. 다시 시도해주세요.");
+      toast("오류 발생", {
+        description: "위치 권한 요청 중 오류가 발생했습니다. 다시 시도해주세요.",
+      });
+    }
   };
 
   return (
@@ -771,7 +851,7 @@ export default function Home() {
         <section id="map" className="border-y-[3px] border-[#17324d] bg-[#17324d] py-20 text-[#fff7e7]">
           <div className="container grid gap-10 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="overflow-hidden border-[4px] border-[#fff7e7] bg-[#fff7e7] shadow-[12px_12px_0_#f2a37b]">
-              <MapView initialCenter={{ lat: 37.5668, lng: 126.9786 }} initialZoom={15} onMapReady={handleMapReady} className="h-[560px]" />
+              <MapView initialCenter={{ lat: 37.5668, lng: 126.9786 }} initialZoom={15} onMapReady={handleMapReady} className="h-[700px]" />
             </div>
             <div className="flex flex-col justify-center">
               <p className="mb-4 inline-flex w-fit items-center gap-2 border-[3px] border-[#fff7e7] bg-[#f2a37b] px-4 py-2 text-sm font-black text-[#17324d] shadow-[4px_4px_0_#fff7e7]"><Radar className="h-4 w-4" /> 실시간 위치 화면</p>

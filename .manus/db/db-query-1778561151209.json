@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE familyMembers ADD COLUMN date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL;\nALTER TABLE locationConsents ADD COLUMN date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL;\nALTER TABLE locationPoints ADD COLUMN date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway06.us-east-1.prod.aws.tidbcloud.com --port 4000 --user TijNhWueziCRztz.root --database fuW72okeNRT65TWogzSyTX --execute ALTER TABLE familyMembers ADD COLUMN date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL;\nALTER TABLE locationConsents ADD COLUMN date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL;\nALTER TABLE locationPoints ADD COLUMN date TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 2752
+}

@@ -44,6 +44,7 @@ export const familyMembers = mysqlTable("familyMembers", {
   canViewLocation: boolean("canViewLocation").default(false).notNull(),
   canShareLocation: boolean("canShareLocation").default(false).notNull(),
   invitedAt: bigint("invitedAt", { mode: "number" }).notNull(),
+  date: timestamp("date").defaultNow().notNull(),
   acceptedAt: bigint("acceptedAt", { mode: "number" }),
   revokedAt: bigint("revokedAt", { mode: "number" }),
 });
@@ -55,6 +56,7 @@ export const locationConsents = mysqlTable("locationConsents", {
   consentVersion: varchar("consentVersion", { length: 32 }).notNull(),
   status: consentStatusEnum.default("granted").notNull(),
   grantedAt: bigint("grantedAt", { mode: "number" }).notNull(),
+  date: timestamp("date").defaultNow().notNull(),
   revokedAt: bigint("revokedAt", { mode: "number" }),
   permissionState: varchar("permissionState", { length: 32 }).notNull(),
   ipAddress: varchar("ipAddress", { length: 96 }),
@@ -70,6 +72,7 @@ export const locationPoints = mysqlTable("locationPoints", {
   longitude: double("longitude").notNull(),
   accuracy: double("accuracy"),
   recordedAt: bigint("recordedAt", { mode: "number" }).notNull(),
+  date: timestamp("date").defaultNow().notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   source: varchar("source", { length: 32 }).default("browser").notNull(),
 });
