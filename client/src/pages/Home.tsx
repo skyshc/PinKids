@@ -187,7 +187,16 @@ export default function Home() {
       await trpcUtils.location.getFamilyLocations.invalidate();
     },
     onError: (error) => {
-      // 위치 업로드 실패 시 콘솔에만 기록 (사용자 경험 방해 안 함)
+      // Phase 1-2: 위치 업로드 실패 시 사용자 UI 피드백
+      const errorMessage = 
+        error.data?.code === "FORBIDDEN" ? "위치 공유 권한이 없습니다" :
+        error.data?.code === "UNAUTHORIZED" ? "다시 로그인해주세요" :
+        "위치 업로드에 실패했습니다. 잠시 후 다시 시도합니다.";
+      
+      toast.error(errorMessage, {
+        description: "자동으로 5분 후 다시 시도합니다",
+        duration: 5000,
+      });
       console.warn("Failed to update location:", error.message);
     },
   });
@@ -214,6 +223,11 @@ export default function Home() {
   // 로그인 후 5분마다 현재 위치를 자동으로 감지하고 업로드
   useEffect(() => {
     if (!isAuthenticated || !user?.id) return;
+    // Phase 1-1: 위치 동의 확인 - 미동의 사용자는 위치 추적 안 함
+    if (!hasActiveStoredConsent) {
+      console.info("Location tracking skipped: no active consent");
+      return;
+    }
     if (!navigator.geolocation) {
       console.warn("Geolocation not supported");
       return;
@@ -238,6 +252,7 @@ export default function Home() {
         },
         (error) => {
           if (!isMounted) return;
+          // Phase 1-3: Geolocation 에러 핸들링
           console.warn("Geolocation error:", error.message);
         },
         { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
@@ -254,7 +269,7 @@ export default function Home() {
       isMounted = false;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [isAuthenticated, user?.id, updateLocationMutation]);
+  }, [isAuthenticated, user?.id, hasActiveStoredConsent, updateLocationMutation]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
