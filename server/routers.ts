@@ -225,6 +225,81 @@ export const appRouter = router({
       return { success: true, ...result } as const;
     }),
   }),
+  invites: router({
+    create: protectedProcedure
+      .input(
+        z.object({
+          familyId: z.number().int().positive(),
+          role: z.enum(["guardian", "child"]),
+          canViewLocation: z.boolean().default(false),
+          canShareLocation: z.boolean().default(false),
+          expiresInHours: z.number().int().positive().default(24),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const membership = await ensureAcceptedMember(ctx.user.id, input.familyId);
+        if (membership.role !== "guardian") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only guardians can create invite links" });
+        }
+        const link = await db.createInviteLink({
+          familyId: input.familyId,
+          createdByUserId: ctx.user.id,
+          role: input.role,
+          canViewLocation: input.canViewLocation,
+          canShareLocation: input.canShareLocation,
+          expiresInHours: input.expiresInHours,
+        });
+        return { link } as const;
+      }),
+    accept: protectedProcedure
+      .input(
+        z.object({
+          token: z.string().min(1),
+          displayName: z.string().min(1).max(120),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const member = await db.acceptInviteLink({
+          token: input.token,
+          userId: ctx.user.id,
+          displayName: input.displayName,
+        });
+        return { member } as const;
+      }),
+    getValid: publicProcedure
+      .input(
+        z.object({
+          token: z.string().min(1),
+        }),
+      )
+      .query(async ({ input }) => {
+        const link = await db.getValidInviteLink(input.token);
+        if (!link) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Invalid or expired invite link" });
+        }
+        return { link } as const;
+      }),
+    getFamilyLinks: protectedProcedure
+      .input(
+        z.object({
+          familyId: z.number().int().positive(),
+        }),
+      )
+      .query(async ({ ctx, input }) => {
+        const links = await db.getFamilyInviteLinks(input.familyId, ctx.user.id);
+        return { links } as const;
+      }),
+    revoke: protectedProcedure
+      .input(
+        z.object({
+          linkId: z.number().int().positive(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        await db.revokeInviteLink(input.linkId, ctx.user.id);
+        return { success: true } as const;
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

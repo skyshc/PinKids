@@ -8,9 +8,12 @@ import {
   InsertLocationConsent,
   InsertLocationPoint,
   InsertUser,
+  InsertInviteLink,
+  InviteLink,
   locationConsents,
   locationPoints,
   users,
+  inviteLinks,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -407,4 +410,284 @@ export async function deleteLocationHistory(userId: number) {
     .set({ status: "revoked", revokedAt: deletedAt })
     .where(and(eq(locationConsents.userId, userId), eq(locationConsents.status, "granted"), isNull(locationConsents.revokedAt)));
   return { deletedAt, retentionDays: LOCATION_HISTORY_RETENTION_DAYS } as const;
+}
+
+// ============================================================================
+// Invite Link Helpers
+// ============================================================================
+
+/**
+ * 초대 링크 생성
+ * @param familyId 초대할 가족 ID
+ * @param createdByUserId 초대 링크를 생성한 사용자 ID
+ * @param role 초대할 역할 (guardian/child)
+ * @param canViewLocation 위치 보기 권한
+ * @param canShareLocation 위치 공유 권한
+ * @param expiresInHours 만료 시간 (기본값: 24시간)
+ * @returns 생성된 초대 링크
+ */
+export async function createInviteLink(input: {
+  familyId: number;
+  createdByUserId: number;
+  role: "guardian" | "child";
+  canViewLocation: boolean;
+  canShareLocation: boolean;
+  expiresInHours?: number;
+}): Promise<InviteLink> {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+
+  // 토큰 생성 (32바이트 랜덤 문자열)
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  const expiresInHours = input.expiresInHours ?? 24;
+  const expiresAt = Date.now() + expiresInHours * 60 * 60 * 1000;
+
+  const values: InsertInviteLink = {
+    familyId: input.familyId,
+    createdByUserId: input.createdByUserId,
+    token,
+    role: input.role,
+    canViewLocation: input.canViewLocation,
+    canShareLocation: input.canShareLocation,
+    expiresAt,
+  };
+
+  await db.insert(inviteLinks).values(values);
+  const result = await db
+    .select()
+    .from(inviteLinks)
+    .where(eq(inviteLinks.token, token))
+    .limit(1);
+
+  if (!result[0]) {
+    throw new Error("Failed to create invite link");
+  }
+
+  return result[0];
+}
+
+/**
+ * 초대 링크 조회 및 검증
+ * @param token 초대 링크 토큰
+ * @returns 유효한 초대 링크 또는 null
+ */
+export async function getValidInviteLink(token: string): Promise<InviteLink | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(inviteLinks)
+    .where(eq(inviteLinks.token, token))
+    .limit(1);
+
+  const link = result[0];
+  if (!link) return null;
+
+  // 만료된 링크 확인
+  if (link.expiresAt < Date.now()) {
+    return null;
+  }
+
+  // 이미 사용된 링크 확인
+  if (link.usedAt !== null) {
+    return null;
+  }
+
+  // 취소된 링크 확인
+  if (link.revokedAt !== null) {
+    return null;
+  }
+
+  return link;
+}
+
+/**
+ * 초대 링크로 가족 구성원 추가
+ * @param token 초대 링크 토큰
+ * @param userId 초대를 수락하는 사용자 ID
+ * @param displayName 표시할 이름
+ * @returns 생성된 가족 구성원
+ */
+export async function acceptInviteLink(input: {
+  token: string;
+  userId: number;
+  displayName: string;
+}): Promise<any> {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+
+  return await db.transaction(async tx => {
+    const nowMs = Date.now();
+    const links = await tx
+      .select()
+      .from(inviteLinks)
+      .where(eq(inviteLinks.token, input.token))
+      .limit(1);
+    const link = links[0];
+
+    if (!link || link.expiresAt <= nowMs || link.usedAt !== null || link.revokedAt !== null) {
+      throw new Error("Invalid or expired invite link");
+    }
+
+    const existingMembership = await tx
+      .select()
+      .from(familyMembers)
+      .where(and(eq(familyMembers.familyId, link.familyId), eq(familyMembers.userId, input.userId)))
+      .limit(1);
+
+    if (existingMembership[0]?.inviteStatus === "accepted") {
+      throw new Error("User is already an accepted member of this family");
+    }
+
+    const now = Date.now();
+    const consumeResult = await tx
+      .update(inviteLinks)
+      .set({ usedAt: now, usedByUserId: input.userId })
+      .where(and(eq(inviteLinks.id, link.id), isNull(inviteLinks.usedAt), isNull(inviteLinks.revokedAt)));
+
+    const affectedRows = Array.isArray(consumeResult)
+      ? Number((consumeResult[0] as { affectedRows?: number } | undefined)?.affectedRows ?? 0)
+      : Number((consumeResult as { affectedRows?: number } | undefined)?.affectedRows ?? 0);
+
+    if (affectedRows !== 1) {
+      throw new Error("Invite link has already been used or revoked");
+    }
+
+    if (existingMembership[0]) {
+      await tx
+        .update(familyMembers)
+        .set({
+          displayName: input.displayName,
+          role: link.role,
+          inviteStatus: "accepted",
+          canViewLocation: link.canViewLocation,
+          canShareLocation: link.canShareLocation,
+          acceptedAt: now,
+          revokedAt: null,
+        })
+        .where(eq(familyMembers.id, existingMembership[0].id));
+    } else {
+      const values: InsertFamilyMember = {
+        familyId: link.familyId,
+        userId: input.userId,
+        displayName: input.displayName,
+        role: link.role,
+        inviteStatus: "accepted",
+        canViewLocation: link.canViewLocation,
+        canShareLocation: link.canShareLocation,
+        invitedAt: now,
+        acceptedAt: now,
+        revokedAt: null,
+      };
+
+      await tx.insert(familyMembers).values(values);
+    }
+
+    const result = await tx
+      .select()
+      .from(familyMembers)
+      .where(and(eq(familyMembers.familyId, link.familyId), eq(familyMembers.userId, input.userId)))
+      .limit(1);
+
+    if (!result[0]) {
+      throw new Error("Failed to create family membership from invite link");
+    }
+
+    return result[0];
+  });
+}
+
+/**
+ * 초대 링크 취소
+ * @param linkId 초대 링크 ID
+ * @param userId 취소 요청 사용자 ID (생성자만 가능)
+ */
+export async function revokeInviteLink(linkId: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+
+  const link = await db
+    .select()
+    .from(inviteLinks)
+    .where(eq(inviteLinks.id, linkId))
+    .limit(1);
+
+  if (!link[0]) {
+    throw new Error("Invite link not found");
+  }
+
+  if (link[0].createdByUserId !== userId) {
+    throw new Error("Only the creator can revoke the invite link");
+  }
+
+  await db
+    .update(inviteLinks)
+    .set({ revokedAt: new Date() })
+    .where(eq(inviteLinks.id, linkId));
+}
+
+/**
+ * 가족의 초대 링크 목록 조회
+ * @param familyId 가족 ID
+ * @param userId 요청 사용자 ID (가족 구성원이어야 함)
+ */
+export async function getFamilyInviteLinks(familyId: number, userId: number): Promise<InviteLink[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  // 사용자가 가족 구성원인지 확인
+  const membership = await db
+    .select()
+    .from(familyMembers)
+    .where(and(eq(familyMembers.familyId, familyId), eq(familyMembers.userId, userId)))
+    .limit(1);
+
+  if (!membership[0]) {
+    throw new Error("User is not a member of this family");
+  }
+
+  return await db
+    .select()
+    .from(inviteLinks)
+    .where(eq(inviteLinks.familyId, familyId))
+    .orderBy(desc(inviteLinks.createdAt));
+}
+
+
+// ============================================================================
+// Test Helpers
+// ============================================================================
+
+/**
+ * 테스트용 사용자 생성
+ */
+export async function createTestUser(email: string, name: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+
+  const openId = `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const values: InsertUser = {
+    openId,
+    name,
+    email,
+    loginMethod: "test",
+    role: "user",
+  };
+
+  await db.insert(users).values(values);
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.openId, openId))
+    .limit(1);
+
+  if (!result[0]) {
+    throw new Error("Failed to create test user");
+  }
+
+  return result[0];
 }

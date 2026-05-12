@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS `inviteLinks` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`familyId` int NOT NULL,\n\t`createdByUserId` int NOT NULL,\n\t`token` varchar(128) NOT NULL,\n\t`familyRole` enum('guardian','child') NOT NULL,\n\t`canViewLocation` boolean NOT NULL DEFAULT false,\n\t`canShareLocation` boolean NOT NULL DEFAULT false,\n\t`expiresAt` bigint NOT NULL,\n\t`createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n\t`usedAt` bigint,\n\t`usedByUserId` int,\n\t`revokedAt` timestamp,\n\tCONSTRAINT `inviteLinks_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `inviteLinks_token_unique` UNIQUE(`token`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway06.us-east-1.prod.aws.tidbcloud.com --port 4000 --user TijNhWueziCRztz.root --database fuW72okeNRT65TWogzSyTX --execute CREATE TABLE IF NOT EXISTS `inviteLinks` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`familyId` int NOT NULL,\n\t`createdByUserId` int NOT NULL,\n\t`token` varchar(128) NOT NULL,\n\t`familyRole` enum('guardian','child') NOT NULL,\n\t`canViewLocation` boolean NOT NULL DEFAULT false,\n\t`canShareLocation` boolean NOT NULL DEFAULT false,\n\t`expiresAt` bigint NOT NULL,\n\t`createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n\t`usedAt` bigint,\n\t`usedByUserId` int,\n\t`revokedAt` timestamp,\n\tCONSTRAINT `inviteLinks_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `inviteLinks_token_unique` UNIQUE(`token`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1927
+}

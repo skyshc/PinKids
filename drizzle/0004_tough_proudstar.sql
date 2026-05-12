@@ -1,0 +1,1 @@
+-- Empty migration restored to keep Drizzle journal and migration files in sync.

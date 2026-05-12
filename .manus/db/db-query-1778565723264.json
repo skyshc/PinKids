@@ -1,0 +1,19 @@
+{
+  "query": "SHOW TABLES LIKE 'inviteLinks'; SELECT COUNT(*) AS invite_link_count FROM inviteLinks;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway06.us-east-1.prod.aws.tidbcloud.com --port 4000 --user TijNhWueziCRztz.root --database fuW72okeNRT65TWogzSyTX --execute SHOW TABLES LIKE 'inviteLinks'; SELECT COUNT(*) AS invite_link_count FROM inviteLinks;",
+  "rows": [
+    {
+      "Tables_in_fuW72okeNRT65TWogzSyTX (inviteLinks)": "inviteLinks"
+    },
+    {
+      "Tables_in_fuW72okeNRT65TWogzSyTX (inviteLinks)": "invite_link_count"
+    },
+    {
+      "Tables_in_fuW72okeNRT65TWogzSyTX (inviteLinks)": "42"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_fuW72okeNRT65TWogzSyTX (inviteLinks)\ninviteLinks\ninvite_link_count\n42\n",
+  "stderr": "",
+  "execution_time_ms": 2069
+}

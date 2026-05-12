@@ -21,6 +21,7 @@ import {
   type LocationPermissionUiState,
 } from "@/lib/locationPermission";
 import { buildSocialLoginUrl, type SocialLoginProvider } from "@/lib/socialLogin";
+import QRCode from "qrcode";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -29,6 +30,8 @@ import {
   ChevronRight,
   Chrome,
   Clock3,
+  Copy,
+  Link as LinkIcon,
   Home as HomeIcon,
   KeyRound,
   LocateFixed,
@@ -43,6 +46,7 @@ import {
   RotateCcw,
   School,
   Settings,
+  Share2,
   ShieldCheck,
   Smartphone,
   Trash2,
@@ -151,12 +155,16 @@ export default function Home() {
   const [locationPermission, setLocationPermission] = useState<LocationPermissionUiState>("idle");
   const [locationPermissionMessage, setLocationPermissionMessage] = useState("");
   const [showLocationSettingsGuide, setShowLocationSettingsGuide] = useState(false);
+  const [inviteRole, setInviteRole] = useState<"child" | "guardian">("child");
+  const [createdInviteUrl, setCreatedInviteUrl] = useState("");
+  const [inviteQrCodeUrl, setInviteQrCodeUrl] = useState("");
   const loginProviderLabel = user?.loginMethod === "google" ? "구글" : user?.loginMethod === "kakao" ? "카카오톡" : "소셜";
   const locationPanelCopy = getLocationPermissionPanelCopy(locationPermission);
   const isLocationBusy = locationPermission === "checking" || locationPermission === "requesting";
   const apiFamilyRole = familyRole === "자녀" ? "child" : "guardian";
   const trpcUtils = trpc.useUtils();
   const consentStatusQuery = trpc.consent.getStatus.useQuery(undefined, { enabled: isAuthenticated });
+  const familyMembershipsQuery = trpc.family.myMemberships.useQuery(undefined, { enabled: isAuthenticated });
   const familyLocationsQuery = trpc.location.getFamilyLocations.useQuery(undefined, {
     enabled: isAuthenticated,
     // 새로 로그인한 사용자는 아직 가족 그룹에 속하지 않아 403 오류가 발생할 수 있으므로, 에러 시 빈 배열 반환
@@ -182,6 +190,36 @@ export default function Home() {
       await Promise.all([trpcUtils.consent.getStatus.invalidate(), trpcUtils.location.getFamilyLocations.invalidate()]);
     },
   });
+  const createInviteLinkMutation = trpc.invites.create.useMutation({
+    onSuccess: async (result) => {
+      const inviteUrl = `${window.location.origin}/invite/${result.link.token}`;
+      setCreatedInviteUrl(inviteUrl);
+      await trpcUtils.invites.getFamilyLinks.invalidate();
+      toast("가족 초대 링크가 생성되었습니다.", {
+        description: "24시간 동안 사용할 수 있는 초대 링크를 복사하거나 공유할 수 있습니다.",
+      });
+    },
+    onError: (error) => {
+      toast.error("초대 링크 생성에 실패했습니다.", {
+        description: error.message || "보호자 권한과 네트워크 상태를 확인해주세요.",
+      });
+    },
+  });
+  const revokeInviteLinkMutation = trpc.invites.revoke.useMutation({
+    onSuccess: async () => {
+      setCreatedInviteUrl("");
+      setInviteQrCodeUrl("");
+      await trpcUtils.invites.getFamilyLinks.invalidate();
+      toast("초대 링크를 취소했습니다.", {
+        description: "취소된 링크로는 더 이상 가족 그룹에 참여할 수 없습니다.",
+      });
+    },
+    onError: (error) => {
+      toast.error("초대 링크 취소에 실패했습니다.", {
+        description: error.message || "잠시 후 다시 시도해주세요.",
+      });
+    },
+  });
   const updateLocationMutation = trpc.location.updateCurrent.useMutation({
     onSuccess: async () => {
       await trpcUtils.location.getFamilyLocations.invalidate();
@@ -202,6 +240,12 @@ export default function Home() {
   });
   const storedFamilyLocations = familyLocationsQuery.data?.locations ?? [];
   const storedLocationsWithCoordinates = storedFamilyLocations.filter(item => item.location);
+  const primaryGuardianMembership = familyMembershipsQuery.data?.memberships.find(member => member.role === "guardian" && member.inviteStatus === "accepted");
+  const familyInviteLinksQuery = trpc.invites.getFamilyLinks.useQuery(
+    { familyId: primaryGuardianMembership?.familyId ?? 0 },
+    { enabled: Boolean(primaryGuardianMembership), retry: false },
+  );
+  const activeInviteLinks = familyInviteLinksQuery.data?.links.filter(link => !link.usedAt && !link.revokedAt && link.expiresAt > Date.now()) ?? [];
   const hasActiveStoredConsent = consentStatusQuery.data?.active ?? false;
   const locationRetentionDays = familyLocationsQuery.data?.retentionDays ?? 30;
   const familyLocationsError = familyLocationsQuery.error;
@@ -525,6 +569,82 @@ export default function Home() {
       description: "보관 기간 안내에 따라 현재 계정의 위치 포인트와 활성 동의가 정리되었습니다.",
     });
   };
+
+  const createFamilyInviteUrl = async () => {
+    if (!isAuthenticated) {
+      toast("로그인이 먼저 필요합니다.", {
+        description: "보호자 계정으로 로그인한 뒤 가족 초대 링크를 만들 수 있습니다.",
+      });
+      openOnboarding(0);
+      return;
+    }
+
+    if (!primaryGuardianMembership) {
+      toast("초대 가능한 가족 그룹이 없습니다.", {
+        description: "보호자 권한이 있는 가족 그룹을 먼저 생성하거나 위치 동의를 완료해주세요.",
+      });
+      openOnboarding(1);
+      return;
+    }
+
+    await createInviteLinkMutation.mutateAsync({
+      familyId: primaryGuardianMembership.familyId,
+      role: inviteRole,
+      canViewLocation: inviteRole === "guardian",
+      canShareLocation: true,
+      expiresInHours: 24,
+    });
+  };
+
+  const copyInviteUrl = async () => {
+    if (!createdInviteUrl) return;
+    await navigator.clipboard.writeText(createdInviteUrl);
+    toast("초대 링크를 복사했습니다.", {
+      description: "카카오톡, 문자, 이메일 등에 붙여넣어 가족에게 전달할 수 있습니다.",
+    });
+  };
+
+  const shareInviteUrl = async () => {
+    if (!createdInviteUrl) return;
+    if (navigator.share) {
+      await navigator.share({
+        title: "아이안심 가족 초대",
+        text: "아이안심 가족 위치 공유 공간에 참여해주세요.",
+        url: createdInviteUrl,
+      });
+      return;
+    }
+    await copyInviteUrl();
+  };
+
+  const revokeInviteUrl = async (linkId: number) => {
+    await revokeInviteLinkMutation.mutateAsync({ linkId });
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!createdInviteUrl) {
+      setInviteQrCodeUrl("");
+      return;
+    }
+
+    QRCode.toDataURL(createdInviteUrl, {
+      width: 220,
+      margin: 2,
+      color: {
+        dark: "#17324d",
+        light: "#fff7e7",
+      },
+    }).then(url => {
+      if (!cancelled) setInviteQrCodeUrl(url);
+    }).catch(() => {
+      if (!cancelled) setInviteQrCodeUrl("");
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [createdInviteUrl]);
 
   useEffect(() => {
     if (!mapInstanceRef.current || !window.google) return;
@@ -971,14 +1091,86 @@ export default function Home() {
         </section>
 
         <section className="container pb-24">
-          <div className="grid gap-6 border-[4px] border-[#17324d] bg-[#f2a37b] p-8 shadow-[12px_12px_0_#17324d] lg:grid-cols-[1fr_auto] lg:items-center lg:p-12">
+          <div className="grid gap-8 border-[4px] border-[#17324d] bg-[#f2a37b] p-8 shadow-[12px_12px_0_#17324d] lg:grid-cols-[0.95fr_1.05fr] lg:items-start lg:p-12">
             <div>
+              <p className="mb-4 inline-flex items-center gap-2 border-[3px] border-[#17324d] bg-[#fff7e7] px-4 py-2 text-sm font-black shadow-[4px_4px_0_#17324d]"><LinkIcon className="h-4 w-4" /> 가족 초대</p>
               <h2 className="font-display text-4xl leading-tight tracking-[-0.03em] sm:text-5xl">가족 초대 링크로 간단히 시작하세요.</h2>
-              <p className="mt-4 max-w-2xl text-base font-bold leading-7 text-[#243e55]">다음 단계에서는 로그인, 가족 그룹 생성, 실제 위치 권한 승인, 알림 설정을 연결해 실사용 가능한 서비스로 확장할 수 있습니다.</p>
+              <p className="mt-4 max-w-2xl text-base font-bold leading-7 text-[#243e55]">보호자가 24시간 유효한 초대 링크를 만들면 가족 구성원이 로그인 후 바로 같은 가족 그룹에 참여할 수 있습니다. 자녀에게는 위치 공유 권한을, 보호자에게는 위치 보기와 공유 권한을 함께 부여합니다.</p>
+              <div className="mt-6 grid gap-3 text-sm font-black sm:grid-cols-3">
+                <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-3 shadow-[4px_4px_0_#17324d]">만료 시간<br /><span className="text-[#1d8664]">24시간</span></div>
+                <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-3 shadow-[4px_4px_0_#17324d]">초대 대상<br /><span className="text-[#1d8664]">자녀/보호자</span></div>
+                <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-3 shadow-[4px_4px_0_#17324d]">수락 방식<br /><span className="text-[#1d8664]">로그인 후 참여</span></div>
+              </div>
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-              <Button onClick={() => openOnboarding(1)} className="h-14 border-[3px] border-[#17324d] bg-[#17324d] px-7 font-black text-[#fff7e7] shadow-[5px_5px_0_#fff7e7] hover:bg-[#254462]"><UsersRound className="mr-2 h-5 w-5" />가족 그룹 만들기</Button>
-              <Button onClick={() => showDemoToast("앱 설치 안내는 데모에서는 안내 화면만 제공합니다.")} variant="outline" className="h-14 border-[3px] border-[#17324d] bg-[#fff7e7] px-7 font-black shadow-[5px_5px_0_#17324d] hover:bg-white"><Smartphone className="mr-2 h-5 w-5" />앱 설치 안내</Button>
+            <div className="border-[4px] border-[#17324d] bg-[#fff7e7] p-5 shadow-[8px_8px_0_#17324d]">
+              <p className="text-sm font-black text-[#51677a]">초대할 가족 역할</p>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setInviteRole("child")}
+                  className={`border-[3px] border-[#17324d] p-4 text-left font-black shadow-[4px_4px_0_#17324d] transition-all ${inviteRole === "child" ? "bg-[#8fd3b6]" : "bg-[#fffdf5] hover:bg-white"}`}
+                >
+                  자녀
+                  <span className="mt-1 block text-xs font-bold text-[#51677a]">위치 공유 가능</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInviteRole("guardian")}
+                  className={`border-[3px] border-[#17324d] p-4 text-left font-black shadow-[4px_4px_0_#17324d] transition-all ${inviteRole === "guardian" ? "bg-[#8fd3b6]" : "bg-[#fffdf5] hover:bg-white"}`}
+                >
+                  보호자
+                  <span className="mt-1 block text-xs font-bold text-[#51677a]">위치 보기/공유 가능</span>
+                </button>
+              </div>
+              <Button
+                onClick={createFamilyInviteUrl}
+                disabled={createInviteLinkMutation.isPending}
+                className="mt-5 h-14 w-full border-[3px] border-[#17324d] bg-[#17324d] px-7 font-black text-[#fff7e7] shadow-[5px_5px_0_#f2a37b] hover:bg-[#254462] disabled:opacity-70"
+              >
+                <UsersRound className="mr-2 h-5 w-5" />{createInviteLinkMutation.isPending ? "초대 링크 생성 중" : "초대 링크 생성"}
+              </Button>
+              {createdInviteUrl && (
+                <div className="mt-5 space-y-3 border-[3px] border-[#17324d] bg-[#fffdf5] p-4 shadow-[5px_5px_0_#8fd3b6]">
+                  <p className="text-sm font-black">생성된 초대 링크</p>
+                  <div className="grid gap-4 sm:grid-cols-[160px_1fr] sm:items-center">
+                    <div className="flex min-h-[160px] items-center justify-center border-[3px] border-[#17324d] bg-[#fff7e7] p-3 shadow-[4px_4px_0_#17324d]">
+                      {inviteQrCodeUrl ? <img src={inviteQrCodeUrl} alt="가족 초대 QR 코드" className="h-32 w-32" /> : <span className="text-xs font-black text-[#51677a]">QR 생성 중</span>}
+                    </div>
+                    <div>
+                      <div className="break-all border-[3px] border-[#17324d] bg-white p-3 text-xs font-bold text-[#314b62]">{createdInviteUrl}</div>
+                      <p className="mt-2 text-xs font-bold text-[#51677a]">QR 코드는 현재 브라우저에서 생성되며, 링크와 동일하게 24시간 동안 사용할 수 있습니다.</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Button onClick={copyInviteUrl} variant="outline" className="h-12 border-[3px] border-[#17324d] bg-[#fff7e7] font-black shadow-[4px_4px_0_#17324d] hover:bg-white"><Copy className="mr-2 h-4 w-4" />복사</Button>
+                    <Button onClick={shareInviteUrl} variant="outline" className="h-12 border-[3px] border-[#17324d] bg-[#fff7e7] font-black shadow-[4px_4px_0_#17324d] hover:bg-white"><Share2 className="mr-2 h-4 w-4" />공유</Button>
+                  </div>
+                </div>
+              )}
+              <div className="mt-5 border-[3px] border-[#17324d] bg-[#fffdf5] p-4 shadow-[5px_5px_0_#f2a37b]">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black">활성 초대 링크</p>
+                  <span className="border-[2px] border-[#17324d] bg-[#8fd3b6] px-2 py-1 text-xs font-black">{activeInviteLinks.length}개</span>
+                </div>
+                {familyInviteLinksQuery.isLoading ? (
+                  <p className="mt-3 text-xs font-bold text-[#51677a]">초대 상태를 불러오는 중입니다.</p>
+                ) : activeInviteLinks.length === 0 ? (
+                  <p className="mt-3 text-xs font-bold text-[#51677a]">현재 공유 가능한 활성 초대 링크가 없습니다.</p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {activeInviteLinks.slice(0, 3).map(link => (
+                      <div key={link.id} className="grid gap-2 border-[2px] border-[#17324d] bg-white p-3 text-xs font-bold sm:grid-cols-[1fr_auto] sm:items-center">
+                        <div>
+                          <p className="font-black">{link.role === "guardian" ? "보호자" : "자녀"} 초대 · {new Date(link.expiresAt).toLocaleString()} 만료</p>
+                          <p className="mt-1 text-[#51677a]">상태: pending · 위치 보기 {link.canViewLocation ? "허용" : "미허용"} · 위치 공유 {link.canShareLocation ? "허용" : "미허용"}</p>
+                        </div>
+                        <Button onClick={() => revokeInviteUrl(link.id)} disabled={revokeInviteLinkMutation.isPending} variant="outline" className="h-9 border-[2px] border-[#17324d] bg-[#fff7e7] text-xs font-black hover:bg-white">취소</Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <Button onClick={() => showDemoToast("앱 설치 안내는 데모에서는 안내 화면만 제공합니다.")} variant="outline" className="mt-4 h-12 w-full border-[3px] border-[#17324d] bg-[#fff7e7] px-7 font-black shadow-[4px_4px_0_#17324d] hover:bg-white"><Smartphone className="mr-2 h-5 w-5" />앱 설치 안내</Button>
             </div>
           </div>
         </section>

@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { and, eq } from "drizzle-orm";
+import { familyMembers, inviteLinks } from "../drizzle/schema";
 import * as db from "./db";
 
 /**
@@ -213,4 +215,261 @@ describe("Location Tracking", () => {
     // 두 번째 레코드가 활성화되어야 함
     expect(location2.isActive).toBe(true);
   });
+});
+
+
+describe("Invite Links", () => {
+  it("보호자는 초대 링크를 생성할 수 있어야 함", async () => {
+    const guardian = await db.createTestUser("guardian@test.com", "보호자");
+    const family = await db.ensurePrimaryFamily({
+      name: `${guardian.name}의 가족`,
+      createdByUserId: guardian.id,
+      displayName: guardian.name || "보호자",
+      role: "guardian",
+    });
+
+    const link = await db.createInviteLink({
+      familyId: family.id,
+      createdByUserId: guardian.id,
+      role: "child",
+      canViewLocation: false,
+      canShareLocation: true,
+      expiresInHours: 24,
+    });
+
+    expect(link).toBeDefined();
+    expect(link.token).toBeDefined();
+    expect(link.role).toBe("child");
+    expect(link.canShareLocation).toBe(true);
+    expect(link.expiresAt).toBeGreaterThan(Date.now());
+  });
+
+  it("유효한 초대 링크를 조회할 수 있어야 함", async () => {
+    const guardian = await db.createTestUser("guardian2@test.com", "보호자2");
+    const family = await db.ensurePrimaryFamily({
+      name: `${guardian.name}의 가족`,
+      createdByUserId: guardian.id,
+      displayName: guardian.name || "보호자",
+      role: "guardian",
+    });
+
+    const link = await db.createInviteLink({
+      familyId: family.id,
+      createdByUserId: guardian.id,
+      role: "child",
+      canViewLocation: false,
+      canShareLocation: true,
+      expiresInHours: 24,
+    });
+
+    const validLink = await db.getValidInviteLink(link.token);
+    expect(validLink).toBeDefined();
+    expect(validLink?.token).toBe(link.token);
+  });
+
+  it("만료된 초대 링크는 조회할 수 없어야 함", async () => {
+    const guardian = await db.createTestUser("guardian3@test.com", "보호자3");
+    const family = await db.ensurePrimaryFamily({
+      name: `${guardian.name}의 가족`,
+      createdByUserId: guardian.id,
+      displayName: guardian.name || "보호자",
+      role: "guardian",
+    });
+
+    // 이미 만료된 링크 생성 (음수 시간)
+    const link = await db.createInviteLink({
+      familyId: family.id,
+      createdByUserId: guardian.id,
+      role: "child",
+      canViewLocation: false,
+      canShareLocation: true,
+      expiresInHours: -1,
+    });
+
+    const validLink = await db.getValidInviteLink(link.token);
+    expect(validLink).toBeNull();
+  });
+
+  it("초대 링크를 수락하면 가족 구성원이 추가되어야 함", async () => {
+    const guardian = await db.createTestUser("guardian4@test.com", "보호자4");
+    const child = await db.createTestUser("child@test.com", "자녀");
+    const family = await db.ensurePrimaryFamily({
+      name: `${guardian.name}의 가족`,
+      createdByUserId: guardian.id,
+      displayName: guardian.name || "보호자",
+      role: "guardian",
+    });
+
+    const link = await db.createInviteLink({
+      familyId: family.id,
+      createdByUserId: guardian.id,
+      role: "child",
+      canViewLocation: false,
+      canShareLocation: true,
+      expiresInHours: 24,
+    });
+
+    const member = await db.acceptInviteLink({
+      token: link.token,
+      userId: child.id,
+      displayName: "우리 아이",
+    });
+
+    expect(member).toBeDefined();
+    expect(member.userId).toBe(child.id);
+    expect(member.role).toBe("child");
+    expect(member.inviteStatus).toBe("accepted");
+    expect(member.canShareLocation).toBe(true);
+  });
+
+  it("이미 사용된 초대 링크는 다시 사용할 수 없어야 함", async () => {
+    const guardian = await db.createTestUser("guardian5@test.com", "보호자5");
+    const child1 = await db.createTestUser("child1@test.com", "자녀1");
+    const family = await db.ensurePrimaryFamily({
+      name: `${guardian.name}의 가족`,
+      createdByUserId: guardian.id,
+      displayName: guardian.name || "보호자",
+      role: "guardian",
+    });
+
+    const link = await db.createInviteLink({
+      familyId: family.id,
+      createdByUserId: guardian.id,
+      role: "child",
+      canViewLocation: false,
+      canShareLocation: true,
+      expiresInHours: 24,
+    });
+
+    // 첫 번째 사용
+    await db.acceptInviteLink({
+      token: link.token,
+      userId: child1.id,
+      displayName: "첫 번째 자녀",
+    });
+
+    // 두 번째 사용 시도
+    const validLink = await db.getValidInviteLink(link.token);
+    expect(validLink).toBeNull();
+  }, 15000);
+
+  it("초대 링크를 취소할 수 있어야 함", async () => {
+    const guardian = await db.createTestUser("guardian6@test.com", "보호자6");
+    const family = await db.ensurePrimaryFamily({
+      name: `${guardian.name}의 가족`,
+      createdByUserId: guardian.id,
+      displayName: guardian.name || "보호자",
+      role: "guardian",
+    });
+
+    const link = await db.createInviteLink({
+      familyId: family.id,
+      createdByUserId: guardian.id,
+      role: "child",
+      canViewLocation: false,
+      canShareLocation: true,
+      expiresInHours: 24,
+    });
+
+    await db.revokeInviteLink(link.id, guardian.id);
+
+    const validLink = await db.getValidInviteLink(link.token);
+    expect(validLink).toBeNull();
+  });
+
+  it("이미 가족 구성원인 사용자의 초대 수락 실패 시 새 링크가 소모되지 않아야 함", async () => {
+    const guardian = await db.createTestUser("guardian-rollback@test.com", "롤백 보호자");
+    const child = await db.createTestUser("child-rollback@test.com", "롤백 자녀");
+    const family = await db.ensurePrimaryFamily({
+      name: `${guardian.name}의 가족`,
+      createdByUserId: guardian.id,
+      displayName: guardian.name || "보호자",
+      role: "guardian",
+    });
+
+    const firstLink = await db.createInviteLink({
+      familyId: family.id,
+      createdByUserId: guardian.id,
+      role: "child",
+      canViewLocation: false,
+      canShareLocation: true,
+      expiresInHours: 24,
+    });
+
+    await db.acceptInviteLink({ token: firstLink.token, userId: child.id, displayName: "기존 자녀" });
+
+    const secondLink = await db.createInviteLink({
+      familyId: family.id,
+      createdByUserId: guardian.id,
+      role: "child",
+      canViewLocation: false,
+      canShareLocation: true,
+      expiresInHours: 24,
+    });
+
+    await expect(
+      db.acceptInviteLink({ token: secondLink.token, userId: child.id, displayName: "중복 자녀" }),
+    ).rejects.toThrow("already an accepted member");
+
+    const rawDb = await db.getDb();
+    if (!rawDb) throw new Error("Database is not available");
+
+    const secondLinkRows = await rawDb.select().from(inviteLinks).where(eq(inviteLinks.id, secondLink.id)).limit(1);
+    expect(secondLinkRows[0]?.usedAt).toBeNull();
+    expect(secondLinkRows[0]?.usedByUserId).toBeNull();
+
+    const memberRows = await rawDb
+      .select()
+      .from(familyMembers)
+      .where(and(eq(familyMembers.familyId, family.id), eq(familyMembers.userId, child.id)));
+    expect(memberRows).toHaveLength(1);
+    expect(memberRows[0]?.displayName).toBe("기존 자녀");
+  }, 15000);
+
+  it("같은 초대 링크를 동시에 수락해도 한 명만 가족 구성원으로 추가되어야 함", async () => {
+    const guardian = await db.createTestUser("guardian-race@test.com", "경쟁 보호자");
+    const child1 = await db.createTestUser("child-race-1@test.com", "경쟁 자녀1");
+    const child2 = await db.createTestUser("child-race-2@test.com", "경쟁 자녀2");
+    const family = await db.ensurePrimaryFamily({
+      name: `${guardian.name}의 가족`,
+      createdByUserId: guardian.id,
+      displayName: guardian.name || "보호자",
+      role: "guardian",
+    });
+
+    const link = await db.createInviteLink({
+      familyId: family.id,
+      createdByUserId: guardian.id,
+      role: "child",
+      canViewLocation: false,
+      canShareLocation: true,
+      expiresInHours: 24,
+    });
+
+    const results = await Promise.allSettled([
+      db.acceptInviteLink({ token: link.token, userId: child1.id, displayName: "동시 자녀1" }),
+      db.acceptInviteLink({ token: link.token, userId: child2.id, displayName: "동시 자녀2" }),
+    ]);
+
+    expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter(result => result.status === "rejected")).toHaveLength(1);
+
+    const rawDb = await db.getDb();
+    if (!rawDb) throw new Error("Database is not available");
+
+    const child1Rows = await rawDb
+      .select()
+      .from(familyMembers)
+      .where(and(eq(familyMembers.familyId, family.id), eq(familyMembers.userId, child1.id)));
+    const child2Rows = await rawDb
+      .select()
+      .from(familyMembers)
+      .where(and(eq(familyMembers.familyId, family.id), eq(familyMembers.userId, child2.id)));
+
+    expect(child1Rows.length + child2Rows.length).toBe(1);
+
+    const linkRows = await rawDb.select().from(inviteLinks).where(eq(inviteLinks.id, link.id)).limit(1);
+    expect(linkRows[0]?.usedAt).not.toBeNull();
+    expect([child1.id, child2.id]).toContain(linkRows[0]?.usedByUserId);
+  }, 20000);
 });

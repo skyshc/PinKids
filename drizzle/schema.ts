@@ -64,6 +64,21 @@ export const locationConsents = mysqlTable("locationConsents", {
   consentText: text("consentText"),
 });
 
+export const inviteLinks = mysqlTable("inviteLinks", {
+  id: int("id").autoincrement().primaryKey(),
+  familyId: int("familyId").notNull(),
+  createdByUserId: int("createdByUserId").notNull(),
+  token: varchar("token", { length: 128 }).notNull().unique(),
+  role: familyRoleEnum.notNull(),
+  canViewLocation: boolean("canViewLocation").default(false).notNull(),
+  canShareLocation: boolean("canShareLocation").default(false).notNull(),
+  expiresAt: bigint("expiresAt", { mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  usedAt: bigint("usedAt", { mode: "number" }),
+  usedByUserId: int("usedByUserId"),
+  revokedAt: timestamp("revokedAt"),
+});
+
 export const locationPoints = mysqlTable("locationPoints", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
@@ -87,3 +102,5 @@ export type LocationConsent = typeof locationConsents.$inferSelect;
 export type InsertLocationConsent = typeof locationConsents.$inferInsert;
 export type LocationPoint = typeof locationPoints.$inferSelect;
 export type InsertLocationPoint = typeof locationPoints.$inferInsert;
+export type InviteLink = typeof inviteLinks.$inferSelect;
+export type InsertInviteLink = typeof inviteLinks.$inferInsert;

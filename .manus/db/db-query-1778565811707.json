@@ -1,0 +1,9 @@
+{
+  "query": "INSERT INTO __drizzle_migrations (hash, created_at)\nSELECT '7f6803a4a0b65c690eb2a25374d1744ed4280c458b431665cf38d82e54b7c04c', 1778547355527\nWHERE NOT EXISTS (SELECT 1 FROM __drizzle_migrations WHERE hash = '7f6803a4a0b65c690eb2a25374d1744ed4280c458b431665cf38d82e54b7c04c');\nINSERT INTO __drizzle_migrations (hash, created_at)\nSELECT 'b3eb71866b232410b90a3c1ab69c31e6c2327c288219713ea5339dc4cd62c7ac', 1778547984342\nWHERE NOT EXISTS (SELECT 1 FROM __drizzle_migrations WHERE hash = 'b3eb71866b232410b90a3c1ab69c31e6c2327c288219713ea5339dc4cd62c7ac');",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway06.us-east-1.prod.aws.tidbcloud.com --port 4000 --user TijNhWueziCRztz.root --database fuW72okeNRT65TWogzSyTX --execute INSERT INTO __drizzle_migrations (hash, created_at)\nSELECT '7f6803a4a0b65c690eb2a25374d1744ed4280c458b431665cf38d82e54b7c04c', 1778547355527\nWHERE NOT EXISTS (SELECT 1 FROM __drizzle_migrations WHERE hash = '7f6803a4a0b65c690eb2a25374d1744ed4280c458b431665cf38d82e54b7c04c');\nINSERT INTO __drizzle_migrations (hash, created_at)\nSELECT 'b3eb71866b232410b90a3c1ab69c31e6c2327c288219713ea5339dc4cd62c7ac', 1778547984342\nWHERE NOT EXISTS (SELECT 1 FROM __drizzle_migrations WHERE hash = 'b3eb71866b232410b90a3c1ab69c31e6c2327c288219713ea5339dc4cd62c7ac');",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 2093
+}
