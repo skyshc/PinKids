@@ -1,0 +1,1 @@
+ALTER TABLE `familyAlertSettings` ADD `alertChannels` varchar(255) DEFAULT 'push' NOT NULL;

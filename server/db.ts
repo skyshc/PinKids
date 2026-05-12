@@ -14,6 +14,7 @@ import {
   InsertSafeZone,
   InsertLocationAlert,
   SafeZone,
+  FamilyAlertSetting,
   locationConsents,
   locationPoints,
   users,
@@ -844,7 +845,7 @@ export async function deleteSafeZone(id: number, userId: number): Promise<void> 
 
 export async function getFamilyAlertSetting(familyId: number, userId: number) {
   const db = await getDb();
-  if (!db) return { familyId, userId, geofenceAlertsEnabled: true, updatedAt: Date.now() };
+  if (!db) return { familyId, userId, geofenceAlertsEnabled: true, alertChannels: ["push"], updatedAt: Date.now() };
 
   const existing = await db
     .select()
@@ -852,10 +853,28 @@ export async function getFamilyAlertSetting(familyId: number, userId: number) {
     .where(and(eq(familyAlertSettings.familyId, familyId), eq(familyAlertSettings.userId, userId)))
     .limit(1);
 
-  return existing[0] ?? { familyId, userId, geofenceAlertsEnabled: true, updatedAt: Date.now() };
+  if (!existing[0]) {
+    return { familyId, userId, geofenceAlertsEnabled: true, alertChannels: ["push"], updatedAt: Date.now() };
+  }
+
+  const channels = parseAlertChannels(existing[0].alertChannels);
+  return { ...existing[0], alertChannels: channels };
 }
 
-export async function setFamilyAlertSetting(input: { familyId: number; userId: number; geofenceAlertsEnabled: boolean }) {
+function parseAlertChannels(channelsJson: string): string[] {
+  try {
+    const parsed = JSON.parse(channelsJson);
+    return Array.isArray(parsed) ? parsed : ["push"];
+  } catch {
+    return ["push"];
+  }
+}
+
+function stringifyAlertChannels(channels: string[]): string {
+  return JSON.stringify(channels);
+}
+
+export async function setFamilyAlertSetting(input: { familyId: number; userId: number; geofenceAlertsEnabled?: boolean; alertChannels?: string[] }) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
 
@@ -871,13 +890,28 @@ export async function setFamilyAlertSetting(input: { familyId: number; userId: n
     .where(and(eq(familyAlertSettings.familyId, input.familyId), eq(familyAlertSettings.userId, input.userId)))
     .limit(1);
 
+  const updateData: any = { updatedAt: Date.now() };
+  if (input.geofenceAlertsEnabled !== undefined) {
+    updateData.geofenceAlertsEnabled = input.geofenceAlertsEnabled;
+  }
+  if (input.alertChannels !== undefined) {
+    updateData.alertChannels = stringifyAlertChannels(input.alertChannels);
+  }
+
   if (existing[0]) {
     await db
       .update(familyAlertSettings)
-      .set({ geofenceAlertsEnabled: input.geofenceAlertsEnabled, updatedAt: Date.now() })
+      .set(updateData)
       .where(eq(familyAlertSettings.id, existing[0].id));
   } else {
-    await db.insert(familyAlertSettings).values({ ...input, updatedAt: Date.now() });
+    const insertData: any = {
+      familyId: input.familyId,
+      userId: input.userId,
+      geofenceAlertsEnabled: input.geofenceAlertsEnabled ?? true,
+      alertChannels: stringifyAlertChannels(input.alertChannels ?? ["push"]),
+      updatedAt: Date.now(),
+    };
+    await db.insert(familyAlertSettings).values(insertData);
   }
 
   return await getFamilyAlertSetting(input.familyId, input.userId);

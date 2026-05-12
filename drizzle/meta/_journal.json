@@ -50,6 +50,13 @@
       "when": 1778567537396,
       "tag": "0006_equal_anthem",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1778568878689,
+      "tag": "0007_broken_romulus",
+      "breakpoints": true
     }
   ]
 }

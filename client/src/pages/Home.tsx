@@ -293,10 +293,17 @@ export default function Home() {
     { familyId: primaryFamilyId },
     { enabled: Boolean(primaryGuardianMembership), retry: false },
   );
+  const utils = trpc.useUtils();
+  const setAlertChannelsMutation = trpc.alertSettings.setChannels.useMutation({
+    onSuccess: () => {
+      void utils.alertSettings.get.invalidate({ familyId: primaryFamilyId });
+    },
+  });
   const activeInviteLinks = familyInviteLinksQuery.data?.links.filter(link => !link.usedAt && !link.revokedAt && link.expiresAt > Date.now()) ?? [];
   const safeZones = safeZonesQuery.data?.zones ?? [];
   const recentLocationAlerts = locationAlertsQuery.data?.alerts ?? [];
   const geofenceAlertsEnabled = alertSettingQuery.data?.setting.geofenceAlertsEnabled ?? true;
+  const alertChannels = (alertSettingQuery.data?.setting.alertChannels ?? ["push"]) as ("push" | "email" | "sms")[];
   const hasActiveStoredConsent = consentStatusQuery.data?.active ?? false;
   const locationRetentionDays = familyLocationsQuery.data?.retentionDays ?? 30;
   const familyLocationsError = familyLocationsQuery.error;
@@ -305,9 +312,33 @@ export default function Home() {
   // 현재 사용자의 위치가 저장되었는지 확인
   const currentUserLocation = storedFamilyLocations.find(item => item.userId === user?.id);
 
+  const toggleAlertChannel = async (channel: "push" | "email" | "sms") => {
+    if (!primaryFamilyId) return;
+    const currentChannels = (alertChannels as string[]);
+    const newChannels = currentChannels.includes(channel)
+      ? currentChannels.filter(c => c !== channel)
+      : [...currentChannels, channel];
+    if (newChannels.length === 0) {
+      toast("최소 하나의 알림 채널을 선택해야 합니다.");
+      return;
+    }
+    try {
+      await setAlertChannelsMutation.mutateAsync({ familyId: primaryFamilyId, alertChannels: newChannels as ("push" | "email" | "sms")[] });
+      toast(`알림 채널이 업데이트되었습니다: ${newChannels.join(", ")}`);
+    } catch (error) {
+      toast("알림 채널 설정 실패");
+    }
+  };
+
   const currentStep = onboardingSteps[onboardingStep];
   const CurrentStepIcon = currentStep.icon;
   const progressWidth = `${((onboardingStep + 1) / onboardingSteps.length) * 100}%`;
+
+  const channelLabels = {
+    push: "푸시 알림",
+    email: "이메일",
+    sms: "문자 메시지",
+  } as const;
 
   useEffect(() => {
     if (user?.name) {
@@ -1164,6 +1195,26 @@ export default function Home() {
                   >
                     {geofenceAlertsEnabled ? "알림 ON" : "알림 OFF"}
                   </Button>
+                </div>
+
+                <div className="border-t-[3px] border-[#17324d] pt-4">
+                  <p className="mb-3 text-xs font-black">알림 수신 방식</p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {(["push", "email", "sms"] as const).map(channel => (
+                      <button
+                        key={channel}
+                        onClick={() => void toggleAlertChannel(channel)}
+                        disabled={!primaryFamilyId || setAlertChannelsMutation.isPending}
+                        className={`border-[3px] border-[#17324d] px-3 py-2 text-xs font-black transition-all ${
+                          alertChannels.includes(channel)
+                            ? "bg-[#8fd3b6] shadow-[3px_3px_0_#17324d]"
+                            : "bg-white text-[#51677a] shadow-[2px_2px_0_#17324d]"
+                        } disabled:opacity-60`}
+                      >
+                        {channelLabels[channel]}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="grid gap-3 lg:grid-cols-[1fr_120px]">

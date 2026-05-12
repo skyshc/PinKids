@@ -311,6 +311,12 @@ export const appRouter = router({
         const setting = await db.setFamilyAlertSetting({ ...input, userId: ctx.user.id });
         return { setting } as const;
       }),
+    setChannels: protectedProcedure
+      .input(z.object({ familyId: z.number().int().positive(), alertChannels: z.array(z.enum(["push", "email", "sms"])).min(1) }))
+      .mutation(async ({ ctx, input }) => {
+        const setting = await db.setFamilyAlertSetting({ familyId: input.familyId, userId: ctx.user.id, alertChannels: input.alertChannels });
+        return { setting } as const;
+      }),
   }),
 
   invites: router({

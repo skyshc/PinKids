@@ -26,6 +26,7 @@ export const familyRoleEnum = mysqlEnum("familyRole", ["guardian", "child"]);
 export const inviteStatusEnum = mysqlEnum("inviteStatus", ["pending", "accepted", "declined", "revoked"]);
 export const consentStatusEnum = mysqlEnum("consentStatus", ["granted", "revoked"]);
 export const geofenceEventTypeEnum = mysqlEnum("geofenceEventType", ["exit", "enter"]);
+export const alertChannelEnum = mysqlEnum("alertChannel", ["push", "email", "sms"]);
 
 export const families = mysqlTable("families", {
   id: int("id").autoincrement().primaryKey(),
@@ -112,6 +113,7 @@ export const familyAlertSettings = mysqlTable("familyAlertSettings", {
   familyId: int("familyId").notNull(),
   userId: int("userId").notNull(),
   geofenceAlertsEnabled: boolean("geofenceAlertsEnabled").default(true).notNull(),
+  alertChannels: varchar("alertChannels", { length: 255 }).default("push").notNull(), // JSON array: ["push", "email", "sms"]
   updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
 });
 
