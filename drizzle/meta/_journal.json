@@ -15,6 +15,20 @@
       "when": 1778492357251,
       "tag": "0001_glorious_sleeper",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1778547355527,
+      "tag": "0002_bitter_maestro",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1778547984342,
+      "tag": "0003_many_oracle",
+      "breakpoints": true
     }
   ]
 }
