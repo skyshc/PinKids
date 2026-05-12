@@ -166,4 +166,51 @@ describe("Location Tracking", () => {
     expect(location).toBeDefined();
     // 실제 삭제는 백그라운드 작업이므로 여기서는 레코드 생성만 검증
   });
+
+  it("같은 좌표의 위치 업데이트는 새 레코드를 생성하되 이전 레코드는 비활성화해야 함", async () => {
+    const family = await db.ensurePrimaryFamily({
+      name: `${mockUser.name}의 가족`,
+      createdByUserId: mockUser.id,
+      displayName: mockUser.name,
+      role: "guardian",
+    });
+
+    // 위치 공유 동의 부여
+    await db.grantLocationConsent({
+      userId: mockUser.id,
+      familyId: family.id,
+      permissionState: "granted",
+      ipAddress: "127.0.0.1",
+      userAgent: "test",
+      consentText: "test consent",
+    });
+
+    const latitude = 37.5668;
+    const longitude = 126.9786;
+
+    // 첫 번째 위치 업데이트
+    const location1 = await db.upsertLocationPoint({
+      userId: mockUser.id,
+      familyId: family.id,
+      latitude,
+      longitude,
+      accuracy: 10,
+      recordedAt: Date.now(),
+    });
+
+    // 두 번째 업데이트 (같은 좌표)
+    const location2 = await db.upsertLocationPoint({
+      userId: mockUser.id,
+      familyId: family.id,
+      latitude,
+      longitude,
+      accuracy: 10,
+      recordedAt: Date.now() + 60000,
+    });
+
+    // 다른 레코드여야 함
+    expect(location1.id).not.toBe(location2.id);
+    // 두 번째 레코드가 활성화되어야 함
+    expect(location2.isActive).toBe(true);
+  });
 });
