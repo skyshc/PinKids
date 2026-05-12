@@ -8,6 +8,8 @@ import * as db from "./db";
 
 const LOCATION_RETENTION_DAYS = db.LOCATION_HISTORY_RETENTION_DAYS;
 
+// COOKIE_NAME은 @shared/const에서 import됨
+
 const isFamilyRole = (role: string | null | undefined): role is "guardian" | "child" => role === "guardian" || role === "child";
 
 const ensureAcceptedMember = async (userId: number, familyId: number) => {
@@ -23,7 +25,27 @@ export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(async (opts) => {
+      const user = opts.ctx.user;
+      if (!user) return null;
+      
+      // 신규 사용자가 로그인했을 때 자동으로 기본 가족 생성
+      const memberships = await db.getAcceptedFamilyMemberships(user.id);
+      if (memberships.length === 0) {
+        try {
+          await db.ensurePrimaryFamily({
+            name: `${user.name || "사용자"}의 가족`,
+            createdByUserId: user.id,
+            displayName: user.name || "사용자",
+            role: "guardian",
+          });
+        } catch (error) {
+          console.warn("Failed to create primary family:", error);
+        }
+      }
+      
+      return user;
+    }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });

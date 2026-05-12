@@ -186,15 +186,20 @@ export default function Home() {
     onSuccess: async () => {
       await trpcUtils.location.getFamilyLocations.invalidate();
     },
+    onError: (error) => {
+      // 위치 업로드 실패 시 콘솔에만 기록 (사용자 경험 방해 안 함)
+      console.warn("Failed to update location:", error.message);
+    },
   });
   const storedFamilyLocations = familyLocationsQuery.data?.locations ?? [];
   const storedLocationsWithCoordinates = storedFamilyLocations.filter(item => item.location);
   const hasActiveStoredConsent = consentStatusQuery.data?.active ?? false;
   const locationRetentionDays = familyLocationsQuery.data?.retentionDays ?? 30;
-  // 새로 로그인한 사용자는 가족 그룹에 속하지 않아 getFamilyLocations가 403을 반환할 수 있음
-  // 이 경우 에러를 무시하고 빈 상태로 표시
   const familyLocationsError = familyLocationsQuery.error;
   const isFamilyLocationsNotFound = familyLocationsError?.data?.code === "FORBIDDEN";
+
+  // 현재 사용자의 위치가 저장되었는지 확인
+  const currentUserLocation = storedFamilyLocations.find(item => item.userId === user?.id);
 
   const currentStep = onboardingSteps[onboardingStep];
   const CurrentStepIcon = currentStep.icon;
@@ -206,19 +211,65 @@ export default function Home() {
     }
   }, [user?.name]);
 
+  // 로그인 후 5분마다 현재 위치를 자동으로 감지하고 업로드
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) return;
+    if (!navigator.geolocation) {
+      console.warn("Geolocation not supported");
+      return;
+    }
+
+    let isMounted = true;
+    let intervalId: NodeJS.Timeout | null = null;
+
+    const updateLocation = () => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          if (!isMounted) return;
+          const { latitude, longitude, accuracy } = position.coords;
+          const recordedAt = new Date().getTime();
+          
+          updateLocationMutation.mutate({
+            latitude,
+            longitude,
+            accuracy: accuracy ?? undefined,
+            recordedAt,
+          });
+        },
+        (error) => {
+          if (!isMounted) return;
+          console.warn("Geolocation error:", error.message);
+        },
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
+      );
+    };
+
+    // 즉시 첫 위치 업데이트
+    updateLocation();
+
+    // 5분(300,000ms)마다 위치 업데이트
+    intervalId = setInterval(updateLocation, 5 * 60 * 1000);
+
+    return () => {
+      isMounted = false;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isAuthenticated, user?.id, updateLocationMutation]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       try {
         const hasCompleted = window.localStorage.getItem("child-location-onboarding-complete");
-        if (!hasCompleted) setShowOnboarding(true);
+        if (!hasCompleted && !isAuthenticated) setShowOnboarding(true);
       } catch {
-        setShowOnboarding(true);
+        if (!isAuthenticated) setShowOnboarding(true);
       }
     }, 450);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [isAuthenticated]);
 
+  // 온보딩 중 위치 권한 확인 (로그인 후 자동 위치 추적과는 별개)
   useEffect(() => {
     if (!showOnboarding || onboardingStep !== 2) return;
     if (locationPermission === "granted" || locationPermission === "requesting") return;
