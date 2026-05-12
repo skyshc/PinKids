@@ -148,6 +148,7 @@ export default function Home() {
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const familyMarkerRefs = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const familyPathRef = useRef<google.maps.Polyline | null>(null);
+  const safeZoneCircleRefs = useRef<google.maps.Circle[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [guardianName, setGuardianName] = useState("민지 보호자");
@@ -158,6 +159,9 @@ export default function Home() {
   const [inviteRole, setInviteRole] = useState<"child" | "guardian">("child");
   const [createdInviteUrl, setCreatedInviteUrl] = useState("");
   const [inviteQrCodeUrl, setInviteQrCodeUrl] = useState("");
+  const [safeZoneName, setSafeZoneName] = useState("우리 집");
+  const [safeZoneRadius, setSafeZoneRadius] = useState(300);
+  const [safeZoneCenter, setSafeZoneCenter] = useState({ lat: 37.5668, lng: 126.9786 });
   const loginProviderLabel = user?.loginMethod === "google" ? "구글" : user?.loginMethod === "kakao" ? "카카오톡" : "소셜";
   const locationPanelCopy = getLocationPermissionPanelCopy(locationPermission);
   const isLocationBusy = locationPermission === "checking" || locationPermission === "requesting";
@@ -188,6 +192,37 @@ export default function Home() {
   const deleteHistoryMutation = trpc.location.deleteHistory.useMutation({
     onSuccess: async () => {
       await Promise.all([trpcUtils.consent.getStatus.invalidate(), trpcUtils.location.getFamilyLocations.invalidate()]);
+    },
+  });
+  const createSafeZoneMutation = trpc.safeZones.create.useMutation({
+    onSuccess: async () => {
+      await trpcUtils.safeZones.list.invalidate();
+      toast("안전 구역을 저장했습니다.", {
+        description: "이후 위치 업데이트부터 진입·이탈 이벤트를 기록합니다.",
+      });
+    },
+    onError: (error) => {
+      toast.error("안전 구역 저장에 실패했습니다.", {
+        description: error.message || "보호자 권한과 입력값을 확인해주세요.",
+      });
+    },
+  });
+  const deleteSafeZoneMutation = trpc.safeZones.delete.useMutation({
+    onSuccess: async () => {
+      await trpcUtils.safeZones.list.invalidate();
+      toast("안전 구역을 비활성화했습니다.", {
+        description: "기존 알림 기록은 보관하되 새 이탈 판정에는 사용하지 않습니다.",
+      });
+    },
+  });
+  const setAlertSettingMutation = trpc.alertSettings.set.useMutation({
+    onSuccess: async () => {
+      await trpcUtils.alertSettings.get.invalidate();
+    },
+  });
+  const acknowledgeAlertMutation = trpc.locationAlerts.acknowledge.useMutation({
+    onSuccess: async () => {
+      await trpcUtils.locationAlerts.list.invalidate();
     },
   });
   const createInviteLinkMutation = trpc.invites.create.useMutation({
@@ -241,11 +276,27 @@ export default function Home() {
   const storedFamilyLocations = familyLocationsQuery.data?.locations ?? [];
   const storedLocationsWithCoordinates = storedFamilyLocations.filter(item => item.location);
   const primaryGuardianMembership = familyMembershipsQuery.data?.memberships.find(member => member.role === "guardian" && member.inviteStatus === "accepted");
+  const primaryFamilyId = primaryGuardianMembership?.familyId ?? 0;
   const familyInviteLinksQuery = trpc.invites.getFamilyLinks.useQuery(
-    { familyId: primaryGuardianMembership?.familyId ?? 0 },
+    { familyId: primaryFamilyId },
+    { enabled: Boolean(primaryGuardianMembership), retry: false },
+  );
+  const safeZonesQuery = trpc.safeZones.list.useQuery(
+    { familyId: primaryFamilyId },
+    { enabled: Boolean(primaryGuardianMembership), retry: false },
+  );
+  const locationAlertsQuery = trpc.locationAlerts.list.useQuery(
+    { familyId: primaryFamilyId, limit: 8 },
+    { enabled: Boolean(primaryGuardianMembership), retry: false },
+  );
+  const alertSettingQuery = trpc.alertSettings.get.useQuery(
+    { familyId: primaryFamilyId },
     { enabled: Boolean(primaryGuardianMembership), retry: false },
   );
   const activeInviteLinks = familyInviteLinksQuery.data?.links.filter(link => !link.usedAt && !link.revokedAt && link.expiresAt > Date.now()) ?? [];
+  const safeZones = safeZonesQuery.data?.zones ?? [];
+  const recentLocationAlerts = locationAlertsQuery.data?.alerts ?? [];
+  const geofenceAlertsEnabled = alertSettingQuery.data?.setting.geofenceAlertsEnabled ?? true;
   const hasActiveStoredConsent = consentStatusQuery.data?.active ?? false;
   const locationRetentionDays = familyLocationsQuery.data?.retentionDays ?? 30;
   const familyLocationsError = familyLocationsQuery.error;
@@ -570,6 +621,54 @@ export default function Home() {
     });
   };
 
+  const useCurrentMapCenterForSafeZone = () => {
+    const center = mapInstanceRef.current?.getCenter();
+    if (!center) {
+      toast("지도 중심을 아직 확인할 수 없습니다.", {
+        description: "지도가 로드된 뒤 다시 시도해주세요.",
+      });
+      return;
+    }
+    setSafeZoneCenter({ lat: center.lat(), lng: center.lng() });
+    toast("지도 중심 좌표를 안전 구역 중심으로 선택했습니다.", {
+      description: `${center.lat().toFixed(5)}, ${center.lng().toFixed(5)}`,
+    });
+  };
+
+  const createSafeZone = async () => {
+    if (!primaryFamilyId) {
+      toast("보호자 가족 그룹이 필요합니다.", {
+        description: "위치 동의를 완료하거나 보호자 권한으로 가족 그룹에 참여한 뒤 안전 구역을 만들 수 있습니다.",
+      });
+      return;
+    }
+
+    await createSafeZoneMutation.mutateAsync({
+      familyId: primaryFamilyId,
+      name: safeZoneName.trim() || "안전 구역",
+      centerLatitude: safeZoneCenter.lat,
+      centerLongitude: safeZoneCenter.lng,
+      radiusMeters: safeZoneRadius,
+      alertsEnabled: true,
+    });
+  };
+
+  const toggleGeofenceAlerts = async () => {
+    if (!primaryFamilyId) return;
+    const nextEnabled = !geofenceAlertsEnabled;
+    await setAlertSettingMutation.mutateAsync({ familyId: primaryFamilyId, geofenceAlertsEnabled: nextEnabled });
+    toast(nextEnabled ? "위치 이탈 알림을 켰습니다." : "위치 이탈 알림을 껐습니다.", {
+      description: nextEnabled ? "안전 구역 진입·이탈 이벤트가 다시 기록됩니다." : "내 알림 설정이 꺼진 동안에는 이탈 알림 수신 대상에서 제외됩니다.",
+    });
+  };
+
+  const acknowledgeLocationAlert = async (alertId: number) => {
+    await acknowledgeAlertMutation.mutateAsync({ alertId });
+    toast("알림을 확인 처리했습니다.", {
+      description: "최근 이탈 기록 목록에 확인 시각이 반영됩니다.",
+    });
+  };
+
   const createFamilyInviteUrl = async () => {
     if (!isAuthenticated) {
       toast("로그인이 먼저 필요합니다.", {
@@ -693,6 +792,29 @@ export default function Home() {
       mapInstanceRef.current.fitBounds(bounds, 72);
     }
   }, [storedFamilyLocations]);
+
+  useEffect(() => {
+    if (!mapInstanceRef.current || !window.google) return;
+
+    safeZoneCircleRefs.current.forEach(circle => circle.setMap(null));
+    safeZoneCircleRefs.current = [];
+
+    safeZones
+      .filter(zone => zone.isActive)
+      .forEach(zone => {
+        const circle = new window.google.maps.Circle({
+          strokeColor: zone.alertsEnabled ? "#8fd3b6" : "#f2a37b",
+          strokeOpacity: 0.95,
+          strokeWeight: 3,
+          fillColor: zone.alertsEnabled ? "#8fd3b6" : "#f2a37b",
+          fillOpacity: 0.18,
+          map: mapInstanceRef.current,
+          center: { lat: zone.centerLatitude, lng: zone.centerLongitude },
+          radius: zone.radiusMeters,
+        });
+        safeZoneCircleRefs.current.push(circle);
+      });
+  }, [safeZones]);
 
   const openOnboarding = (step = 0) => {
     setOnboardingStep(step);
@@ -1028,6 +1150,95 @@ export default function Home() {
                   기록 삭제를 누르면 현재 로그인한 사용자의 저장 좌표가 즉시 삭제되고 가족 위치 목록에서 사라집니다. 동의 철회는 활성 동의 상태를 종료하지만, 별도 삭제 전까지 보관 기간 내 기록이 남을 수 있으므로 민감한 위치 정보는 기록 삭제를 함께 실행하도록 안내합니다.
                 </p>
               </div>
+              <div className="mt-6 grid gap-4 border-[3px] border-[#fff7e7] bg-[#fff7e7] p-4 text-[#17324d] shadow-[5px_5px_0_#f2a37b]">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="inline-flex items-center gap-2 text-sm font-black"><BellRing className="h-4 w-4" /> 안전 구역 알림</p>
+                    <p className="mt-1 text-xs font-bold text-[#51677a]">지도 중심을 기준으로 반경을 저장하면 이후 위치 업데이트 시 진입·이탈 기록이 남습니다.</p>
+                  </div>
+                  <Button
+                    onClick={() => void toggleGeofenceAlerts()}
+                    disabled={!primaryFamilyId || setAlertSettingMutation.isPending}
+                    variant="outline"
+                    className={`border-[3px] border-[#17324d] font-black shadow-[4px_4px_0_#17324d] ${geofenceAlertsEnabled ? "bg-[#8fd3b6]" : "bg-[#fff0e8] text-[#9d3c23]"}`}
+                  >
+                    {geofenceAlertsEnabled ? "알림 ON" : "알림 OFF"}
+                  </Button>
+                </div>
+
+                <div className="grid gap-3 lg:grid-cols-[1fr_120px]">
+                  <label className="text-xs font-black">
+                    구역 이름
+                    <input
+                      value={safeZoneName}
+                      onChange={event => setSafeZoneName(event.target.value)}
+                      className="mt-2 w-full border-[3px] border-[#17324d] bg-white px-3 py-2 text-sm font-bold outline-none focus:shadow-[3px_3px_0_#8fd3b6]"
+                      placeholder="학교, 집, 학원"
+                    />
+                  </label>
+                  <label className="text-xs font-black">
+                    반경(m)
+                    <input
+                      type="number"
+                      min={30}
+                      max={5000}
+                      value={safeZoneRadius}
+                      onChange={event => setSafeZoneRadius(Math.max(30, Math.min(5000, Number(event.target.value) || 300)))}
+                      className="mt-2 w-full border-[3px] border-[#17324d] bg-white px-3 py-2 text-sm font-bold outline-none focus:shadow-[3px_3px_0_#8fd3b6]"
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Button onClick={useCurrentMapCenterForSafeZone} variant="outline" className="border-[3px] border-[#17324d] bg-[#fff7e7] font-black shadow-[4px_4px_0_#17324d] hover:bg-white">지도 중심 좌표 사용</Button>
+                  <Button onClick={() => void createSafeZone()} disabled={!primaryFamilyId || createSafeZoneMutation.isPending} className="border-[3px] border-[#17324d] bg-[#17324d] font-black text-[#fff7e7] shadow-[4px_4px_0_#8fd3b6] hover:bg-[#254462] disabled:opacity-60">안전 구역 저장</Button>
+                </div>
+                <p className="text-xs font-bold text-[#51677a]">선택 좌표: {safeZoneCenter.lat.toFixed(5)}, {safeZoneCenter.lng.toFixed(5)}</p>
+
+                <div className="grid gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-black">등록된 안전 구역</p>
+                    <span className="border-[2px] border-[#17324d] bg-[#8fd3b6] px-2 py-1 text-xs font-black">{safeZones.filter(zone => zone.isActive).length}개</span>
+                  </div>
+                  {safeZonesQuery.isLoading ? (
+                    <p className="text-xs font-bold text-[#51677a]">안전 구역을 불러오는 중입니다.</p>
+                  ) : safeZones.filter(zone => zone.isActive).length === 0 ? (
+                    <p className="border-[2px] border-[#17324d] bg-[#fffdf5] p-3 text-xs font-bold text-[#51677a]">아직 저장된 안전 구역이 없습니다. 지도를 원하는 위치로 이동한 뒤 반경을 저장해주세요.</p>
+                  ) : (
+                    safeZones.filter(zone => zone.isActive).slice(0, 4).map(zone => (
+                      <div key={zone.id} className="grid gap-2 border-[2px] border-[#17324d] bg-[#fffdf5] p-3 text-xs font-bold sm:grid-cols-[1fr_auto] sm:items-center">
+                        <div>
+                          <p className="font-black">{zone.name} · 반경 {zone.radiusMeters}m</p>
+                          <p className="mt-1 text-[#51677a]">좌표 {zone.centerLatitude.toFixed(4)}, {zone.centerLongitude.toFixed(4)} · {zone.alertsEnabled ? "개별 알림 켜짐" : "개별 알림 꺼짐"}</p>
+                        </div>
+                        <Button onClick={() => void deleteSafeZoneMutation.mutateAsync({ id: zone.id })} disabled={deleteSafeZoneMutation.isPending} variant="outline" className="h-9 border-[2px] border-[#17324d] bg-[#fff7e7] text-xs font-black hover:bg-white">비활성화</Button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="grid gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-black">최근 이탈·진입 기록</p>
+                    <span className="border-[2px] border-[#17324d] bg-[#f8d9a8] px-2 py-1 text-xs font-black">{recentLocationAlerts.length}건</span>
+                  </div>
+                  {locationAlertsQuery.isLoading ? (
+                    <p className="text-xs font-bold text-[#51677a]">최근 알림을 불러오는 중입니다.</p>
+                  ) : recentLocationAlerts.length === 0 ? (
+                    <p className="border-[2px] border-[#17324d] bg-[#fffdf5] p-3 text-xs font-bold text-[#51677a]">아직 위치 이탈 기록이 없습니다. 저장된 위치가 안전 구역 경계를 넘을 때 기록됩니다.</p>
+                  ) : (
+                    recentLocationAlerts.map(alert => (
+                      <div key={alert.id} className="grid gap-2 border-[2px] border-[#17324d] bg-[#fffdf5] p-3 text-xs font-bold sm:grid-cols-[1fr_auto] sm:items-center">
+                        <div>
+                          <p className="font-black">{alert.message}</p>
+                          <p className="mt-1 text-[#51677a]">거리 {Math.round(alert.distanceMeters)}m · {new Date(alert.createdAt).toLocaleString()} · {alert.acknowledgedAt ? "확인 완료" : "미확인"}</p>
+                        </div>
+                        {!alert.acknowledgedAt && <Button onClick={() => void acknowledgeLocationAlert(alert.id)} disabled={acknowledgeAlertMutation.isPending} variant="outline" className="h-9 border-[2px] border-[#17324d] bg-[#fff7e7] text-xs font-black hover:bg-white">확인</Button>}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
               <div className="mt-8 space-y-4">
                 {storedFamilyLocations.length > 0 ? (
                   storedFamilyLocations.map((member, index) => (

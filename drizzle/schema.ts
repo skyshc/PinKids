@@ -25,6 +25,7 @@ export const users = mysqlTable("users", {
 export const familyRoleEnum = mysqlEnum("familyRole", ["guardian", "child"]);
 export const inviteStatusEnum = mysqlEnum("inviteStatus", ["pending", "accepted", "declined", "revoked"]);
 export const consentStatusEnum = mysqlEnum("consentStatus", ["granted", "revoked"]);
+export const geofenceEventTypeEnum = mysqlEnum("geofenceEventType", ["exit", "enter"]);
 
 export const families = mysqlTable("families", {
   id: int("id").autoincrement().primaryKey(),
@@ -92,6 +93,43 @@ export const locationPoints = mysqlTable("locationPoints", {
   source: varchar("source", { length: 32 }).default("browser").notNull(),
 });
 
+export const safeZones = mysqlTable("safeZones", {
+  id: int("id").autoincrement().primaryKey(),
+  familyId: int("familyId").notNull(),
+  createdByUserId: int("createdByUserId").notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  centerLatitude: double("centerLatitude").notNull(),
+  centerLongitude: double("centerLongitude").notNull(),
+  radiusMeters: int("radiusMeters").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  alertsEnabled: boolean("alertsEnabled").default(true).notNull(),
+  createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+  updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+});
+
+export const familyAlertSettings = mysqlTable("familyAlertSettings", {
+  id: int("id").autoincrement().primaryKey(),
+  familyId: int("familyId").notNull(),
+  userId: int("userId").notNull(),
+  geofenceAlertsEnabled: boolean("geofenceAlertsEnabled").default(true).notNull(),
+  updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+});
+
+export const locationAlerts = mysqlTable("locationAlerts", {
+  id: int("id").autoincrement().primaryKey(),
+  familyId: int("familyId").notNull(),
+  safeZoneId: int("safeZoneId").notNull(),
+  memberUserId: int("memberUserId").notNull(),
+  locationPointId: int("locationPointId"),
+  eventType: geofenceEventTypeEnum.notNull(),
+  latitude: double("latitude").notNull(),
+  longitude: double("longitude").notNull(),
+  distanceMeters: double("distanceMeters").notNull(),
+  message: varchar("message", { length: 255 }).notNull(),
+  createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+  acknowledgedAt: bigint("acknowledgedAt", { mode: "number" }),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Family = typeof families.$inferSelect;
@@ -104,3 +142,9 @@ export type LocationPoint = typeof locationPoints.$inferSelect;
 export type InsertLocationPoint = typeof locationPoints.$inferInsert;
 export type InviteLink = typeof inviteLinks.$inferSelect;
 export type InsertInviteLink = typeof inviteLinks.$inferInsert;
+export type SafeZone = typeof safeZones.$inferSelect;
+export type InsertSafeZone = typeof safeZones.$inferInsert;
+export type FamilyAlertSetting = typeof familyAlertSettings.$inferSelect;
+export type InsertFamilyAlertSetting = typeof familyAlertSettings.$inferInsert;
+export type LocationAlert = typeof locationAlerts.$inferSelect;
+export type InsertLocationAlert = typeof locationAlerts.$inferInsert;

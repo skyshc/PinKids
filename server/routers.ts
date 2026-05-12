@@ -225,6 +225,94 @@ export const appRouter = router({
       return { success: true, ...result } as const;
     }),
   }),
+  safeZones: router({
+    list: protectedProcedure
+      .input(z.object({ familyId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const membership = await ensureAcceptedMember(ctx.user.id, input.familyId);
+        if (!membership.canViewLocation) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only members with viewing permission can read safe zones" });
+        }
+        const zones = await db.listSafeZones(input.familyId);
+        return { zones } as const;
+      }),
+    create: protectedProcedure
+      .input(
+        z.object({
+          familyId: z.number().int().positive(),
+          name: z.string().trim().min(1).max(80),
+          centerLatitude: z.number().min(-90).max(90),
+          centerLongitude: z.number().min(-180).max(180),
+          radiusMeters: z.number().int().min(30).max(5000),
+          alertsEnabled: z.boolean().default(true),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const zone = await db.createSafeZone({ ...input, userId: ctx.user.id });
+        return { zone } as const;
+      }),
+    update: protectedProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          name: z.string().trim().min(1).max(80).optional(),
+          centerLatitude: z.number().min(-90).max(90).optional(),
+          centerLongitude: z.number().min(-180).max(180).optional(),
+          radiusMeters: z.number().int().min(30).max(5000).optional(),
+          isActive: z.boolean().optional(),
+          alertsEnabled: z.boolean().optional(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const zone = await db.updateSafeZone({ ...input, userId: ctx.user.id });
+        return { zone } as const;
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.deleteSafeZone(input.id, ctx.user.id);
+        return { success: true } as const;
+      }),
+  }),
+
+  locationAlerts: router({
+    list: protectedProcedure
+      .input(z.object({ familyId: z.number().int().positive(), limit: z.number().int().min(1).max(100).default(20) }))
+      .query(async ({ ctx, input }) => {
+        const membership = await ensureAcceptedMember(ctx.user.id, input.familyId);
+        if (!membership.canViewLocation) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only members with viewing permission can read location alerts" });
+        }
+        const alerts = await db.listLocationAlerts(input.familyId, input.limit);
+        return { alerts } as const;
+      }),
+    acknowledge: protectedProcedure
+      .input(z.object({ alertId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const alert = await db.acknowledgeLocationAlert(input.alertId, ctx.user.id);
+        return { alert } as const;
+      }),
+  }),
+
+  alertSettings: router({
+    get: protectedProcedure
+      .input(z.object({ familyId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const membership = await ensureAcceptedMember(ctx.user.id, input.familyId);
+        if (!membership.canViewLocation) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only members with viewing permission can read alert settings" });
+        }
+        const setting = await db.getFamilyAlertSetting(input.familyId, ctx.user.id);
+        return { setting } as const;
+      }),
+    set: protectedProcedure
+      .input(z.object({ familyId: z.number().int().positive(), geofenceAlertsEnabled: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        const setting = await db.setFamilyAlertSetting({ ...input, userId: ctx.user.id });
+        return { setting } as const;
+      }),
+  }),
+
   invites: router({
     create: protectedProcedure
       .input(

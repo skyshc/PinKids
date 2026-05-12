@@ -43,6 +43,13 @@
       "when": 1778564487236,
       "tag": "0005_magenta_blacklash",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1778567537396,
+      "tag": "0006_equal_anthem",
+      "breakpoints": true
     }
   ]
 }

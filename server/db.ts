@@ -10,12 +10,20 @@ import {
   InsertUser,
   InsertInviteLink,
   InviteLink,
+  LocationPoint,
+  InsertSafeZone,
+  InsertLocationAlert,
+  SafeZone,
   locationConsents,
   locationPoints,
   users,
   inviteLinks,
+  safeZones,
+  familyAlertSettings,
+  locationAlerts,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
+import { notifyOwner } from "./_core/notification";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -322,6 +330,14 @@ export async function upsertLocationPoint(input: UpsertLocationPointInput) {
     throw new Error("Accepted family membership with location sharing permission is required");
   }
 
+  const previousLocations = await db
+    .select()
+    .from(locationPoints)
+    .where(and(eq(locationPoints.userId, input.userId), eq(locationPoints.isActive, true)))
+    .orderBy(desc(locationPoints.recordedAt))
+    .limit(1);
+  const previousLocation = previousLocations[0] ?? null;
+
   await db.update(locationPoints).set({ isActive: false }).where(eq(locationPoints.userId, input.userId));
 
   const values: InsertLocationPoint = {
@@ -342,6 +358,11 @@ export async function upsertLocationPoint(input: UpsertLocationPointInput) {
     .where(and(eq(locationPoints.userId, input.userId), eq(locationPoints.isActive, true)))
     .orderBy(desc(locationPoints.recordedAt))
     .limit(1);
+
+  if (result[0]) {
+    await evaluateGeofenceForLocationPoint(result[0], previousLocation);
+  }
+
   return result[0];
 }
 
@@ -689,5 +710,298 @@ export async function createTestUser(email: string, name: string) {
     throw new Error("Failed to create test user");
   }
 
+  return result[0];
+}
+
+export type SafeZoneInput = {
+  familyId: number;
+  userId: number;
+  name: string;
+  centerLatitude: number;
+  centerLongitude: number;
+  radiusMeters: number;
+  alertsEnabled?: boolean;
+};
+
+export function calculateDistanceMeters(from: { latitude: number; longitude: number }, to: { latitude: number; longitude: number }): number {
+  const earthRadiusMeters = 6_371_000;
+  const toRadians = (degree: number) => (degree * Math.PI) / 180;
+  const dLat = toRadians(to.latitude - from.latitude);
+  const dLng = toRadians(to.longitude - from.longitude);
+  const lat1 = toRadians(from.latitude);
+  const lat2 = toRadians(to.latitude);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export function getGeofenceTransition(input: { currentDistanceMeters: number; previousDistanceMeters?: number | null; radiusMeters: number }): "enter" | "exit" | null {
+  const currentOutside = input.currentDistanceMeters > input.radiusMeters;
+  const previousOutside = input.previousDistanceMeters == null ? false : input.previousDistanceMeters > input.radiusMeters;
+  if (currentOutside === previousOutside) return null;
+  return currentOutside ? "exit" : "enter";
+}
+
+export async function listSafeZones(familyId: number): Promise<SafeZone[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db.select().from(safeZones).where(eq(safeZones.familyId, familyId)).orderBy(desc(safeZones.updatedAt));
+}
+
+export async function createSafeZone(input: SafeZoneInput): Promise<SafeZone> {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+
+  const memberships = await getAcceptedFamilyMemberships(input.userId);
+  const membership = memberships.find(member => member.familyId === input.familyId) ?? null;
+  if (!membership || !membership.canViewLocation) {
+    throw new Error("Accepted family membership with location viewing permission is required");
+  }
+
+  const now = Date.now();
+  const values: InsertSafeZone = {
+    familyId: input.familyId,
+    createdByUserId: input.userId,
+    name: input.name,
+    centerLatitude: input.centerLatitude,
+    centerLongitude: input.centerLongitude,
+    radiusMeters: input.radiusMeters,
+    isActive: true,
+    alertsEnabled: input.alertsEnabled ?? true,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await db.insert(safeZones).values(values);
+  const result = await db
+    .select()
+    .from(safeZones)
+    .where(and(eq(safeZones.familyId, input.familyId), eq(safeZones.createdByUserId, input.userId)))
+    .orderBy(desc(safeZones.createdAt))
+    .limit(1);
+
+  if (!result[0]) throw new Error("Failed to create safe zone");
+  return result[0];
+}
+
+export async function updateSafeZone(input: {
+  id: number;
+  userId: number;
+  name?: string;
+  centerLatitude?: number;
+  centerLongitude?: number;
+  radiusMeters?: number;
+  isActive?: boolean;
+  alertsEnabled?: boolean;
+}): Promise<SafeZone> {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+
+  const existing = await db.select().from(safeZones).where(eq(safeZones.id, input.id)).limit(1);
+  const zone = existing[0];
+  if (!zone) throw new Error("Safe zone not found");
+
+  const memberships = await getAcceptedFamilyMemberships(input.userId);
+  const membership = memberships.find(member => member.familyId === zone.familyId) ?? null;
+  if (!membership || !membership.canViewLocation) {
+    throw new Error("Accepted family membership with location viewing permission is required");
+  }
+
+  await db
+    .update(safeZones)
+    .set({
+      name: input.name ?? zone.name,
+      centerLatitude: input.centerLatitude ?? zone.centerLatitude,
+      centerLongitude: input.centerLongitude ?? zone.centerLongitude,
+      radiusMeters: input.radiusMeters ?? zone.radiusMeters,
+      isActive: input.isActive ?? zone.isActive,
+      alertsEnabled: input.alertsEnabled ?? zone.alertsEnabled,
+      updatedAt: Date.now(),
+    })
+    .where(eq(safeZones.id, input.id));
+
+  const result = await db.select().from(safeZones).where(eq(safeZones.id, input.id)).limit(1);
+  if (!result[0]) throw new Error("Failed to update safe zone");
+  return result[0];
+}
+
+export async function deleteSafeZone(id: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+
+  const existing = await db.select().from(safeZones).where(eq(safeZones.id, id)).limit(1);
+  const zone = existing[0];
+  if (!zone) throw new Error("Safe zone not found");
+
+  const memberships = await getAcceptedFamilyMemberships(userId);
+  const membership = memberships.find(member => member.familyId === zone.familyId) ?? null;
+  if (!membership || !membership.canViewLocation) {
+    throw new Error("Accepted family membership with location viewing permission is required");
+  }
+
+  await db.update(safeZones).set({ isActive: false, updatedAt: Date.now() }).where(eq(safeZones.id, id));
+}
+
+export async function getFamilyAlertSetting(familyId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return { familyId, userId, geofenceAlertsEnabled: true, updatedAt: Date.now() };
+
+  const existing = await db
+    .select()
+    .from(familyAlertSettings)
+    .where(and(eq(familyAlertSettings.familyId, familyId), eq(familyAlertSettings.userId, userId)))
+    .limit(1);
+
+  return existing[0] ?? { familyId, userId, geofenceAlertsEnabled: true, updatedAt: Date.now() };
+}
+
+export async function setFamilyAlertSetting(input: { familyId: number; userId: number; geofenceAlertsEnabled: boolean }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+
+  const memberships = await getAcceptedFamilyMemberships(input.userId);
+  const membership = memberships.find(member => member.familyId === input.familyId) ?? null;
+  if (!membership || !membership.canViewLocation) {
+    throw new Error("Accepted family membership with location viewing permission is required");
+  }
+
+  const existing = await db
+    .select()
+    .from(familyAlertSettings)
+    .where(and(eq(familyAlertSettings.familyId, input.familyId), eq(familyAlertSettings.userId, input.userId)))
+    .limit(1);
+
+  if (existing[0]) {
+    await db
+      .update(familyAlertSettings)
+      .set({ geofenceAlertsEnabled: input.geofenceAlertsEnabled, updatedAt: Date.now() })
+      .where(eq(familyAlertSettings.id, existing[0].id));
+  } else {
+    await db.insert(familyAlertSettings).values({ ...input, updatedAt: Date.now() });
+  }
+
+  return await getFamilyAlertSetting(input.familyId, input.userId);
+}
+
+export async function listLocationAlerts(familyId: number, limit = 20) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(locationAlerts)
+    .where(eq(locationAlerts.familyId, familyId))
+    .orderBy(desc(locationAlerts.createdAt))
+    .limit(limit);
+}
+
+async function hasEnabledGeofenceRecipient(familyId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const viewers = await db
+    .select()
+    .from(familyMembers)
+    .where(and(eq(familyMembers.familyId, familyId), eq(familyMembers.inviteStatus, "accepted"), eq(familyMembers.canViewLocation, true)));
+
+  if (viewers.length === 0) return true;
+
+  for (const viewer of viewers) {
+    if (!viewer.userId) continue;
+    const setting = await getFamilyAlertSetting(familyId, viewer.userId);
+    if (setting.geofenceAlertsEnabled) return true;
+  }
+
+  return false;
+}
+
+export async function evaluateGeofenceForLocationPoint(current: LocationPoint, previous: LocationPoint | null = null) {
+  const db = await getDb();
+  if (!db || !current.familyId) return [];
+
+  const zones = await db
+    .select()
+    .from(safeZones)
+    .where(and(eq(safeZones.familyId, current.familyId), eq(safeZones.isActive, true), eq(safeZones.alertsEnabled, true)));
+
+  if (zones.length === 0) return [];
+  const familyAlertsEnabled = await hasEnabledGeofenceRecipient(current.familyId);
+  if (!familyAlertsEnabled) return [];
+
+  const createdAlerts = [];
+  for (const zone of zones) {
+    const currentDistance = calculateDistanceMeters(
+      { latitude: zone.centerLatitude, longitude: zone.centerLongitude },
+      { latitude: current.latitude, longitude: current.longitude },
+    );
+    const previousDistance = previous
+      ? calculateDistanceMeters(
+          { latitude: zone.centerLatitude, longitude: zone.centerLongitude },
+          { latitude: previous.latitude, longitude: previous.longitude },
+        )
+      : null;
+    const eventType = getGeofenceTransition({
+      currentDistanceMeters: currentDistance,
+      previousDistanceMeters: previousDistance,
+      radiusMeters: zone.radiusMeters,
+    });
+
+    if (!eventType) continue;
+    const message = eventType === "exit"
+      ? `${zone.name} 안전 구역을 벗어났습니다.`
+      : `${zone.name} 안전 구역 안으로 돌아왔습니다.`;
+    const values: InsertLocationAlert = {
+      familyId: current.familyId,
+      safeZoneId: zone.id,
+      memberUserId: current.userId,
+      locationPointId: current.id,
+      eventType,
+      latitude: current.latitude,
+      longitude: current.longitude,
+      distanceMeters: Math.round(currentDistance),
+      message,
+      createdAt: current.recordedAt ?? Date.now(),
+      acknowledgedAt: null,
+    };
+
+    await db.insert(locationAlerts).values(values);
+    const inserted = await db
+      .select()
+      .from(locationAlerts)
+      .where(and(eq(locationAlerts.familyId, current.familyId), eq(locationAlerts.safeZoneId, zone.id), eq(locationAlerts.memberUserId, current.userId)))
+      .orderBy(desc(locationAlerts.createdAt))
+      .limit(1);
+    if (inserted[0]) {
+      createdAlerts.push(inserted[0]);
+      await notifyOwner({
+        title: eventType === "exit" ? "안전 구역 이탈 알림" : "안전 구역 복귀 알림",
+        content: `${message}\n가족 ID: ${current.familyId}\n사용자 ID: ${current.userId}\n거리: ${Math.round(currentDistance)}m`,
+      }).catch(error => {
+        console.warn("[Geofence] Failed to dispatch owner notification:", error);
+      });
+    }
+  }
+
+  return createdAlerts;
+}
+
+export async function acknowledgeLocationAlert(alertId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+
+  const existing = await db.select().from(locationAlerts).where(eq(locationAlerts.id, alertId)).limit(1);
+  const alert = existing[0];
+  if (!alert) throw new Error("Location alert not found");
+
+  const memberships = await getAcceptedFamilyMemberships(userId);
+  const membership = memberships.find(member => member.familyId === alert.familyId) ?? null;
+  if (!membership || !membership.canViewLocation) {
+    throw new Error("Accepted family membership with location viewing permission is required");
+  }
+
+  const acknowledgedAt = Date.now();
+  await db.update(locationAlerts).set({ acknowledgedAt }).where(eq(locationAlerts.id, alertId));
+
+  const result = await db.select().from(locationAlerts).where(eq(locationAlerts.id, alertId)).limit(1);
   return result[0];
 }
