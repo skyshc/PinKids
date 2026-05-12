@@ -90,6 +90,7 @@
   - [x] 데이터베이스 마이그레이션 적용
   - [x] tRPC alertSettings.setChannels API 구현
   - [x] Home.tsx 알림 채널 다중 선택 UI 추가
+  - [x] Mutation 성공 시 쿼리 invalidate 추가
   - [ ] 알림 발송 로직에 선택 채널 반영 (이메일/SMS 백엔드 연동)
   - [ ] UI 및 서버 로직 테스트 추가
 
