@@ -1121,10 +1121,10 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="map" className="border-y-[3px] border-[#17324d] bg-[#17324d] py-20 text-[#fff7e7]">
-          <div className="container grid gap-10 lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="overflow-hidden border-[4px] border-[#fff7e7] bg-[#fff7e7] shadow-[12px_12px_0_#f2a37b]">
-              <MapView initialCenter={{ lat: 37.5668, lng: 126.9786 }} initialZoom={15} onMapReady={handleMapReady} className="h-[700px]" />
+        <section id="map" className="border-y-[3px] border-[#17324d] bg-[#17324d] py-12 sm:py-16 lg:py-20 text-[#fff7e7]">
+          <div className="container grid gap-6 sm:gap-8 lg:gap-10 grid-cols-1 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="overflow-hidden border-[4px] border-[#fff7e7] bg-[#fff7e7] shadow-[12px_12px_0_#f2a37b] w-full">
+              <MapView initialCenter={{ lat: 37.5668, lng: 126.9786 }} initialZoom={15} onMapReady={handleMapReady} className="h-full w-full min-h-[300px] sm:min-h-[500px] lg:min-h-[700px]" />
             </div>
             <div className="flex flex-col justify-center">
               <p className="mb-4 inline-flex w-fit items-center gap-2 border-[3px] border-[#fff7e7] bg-[#f2a37b] px-4 py-2 text-sm font-black text-[#17324d] shadow-[4px_4px_0_#fff7e7]"><Radar className="h-4 w-4" /> 실시간 위치 화면</p>

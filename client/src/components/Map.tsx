@@ -149,7 +149,20 @@ export function MapView({
     init();
   }, [init]);
 
+  // 창 크기 변경 시 지도 크기 재조정
+  useEffect(() => {
+    const handleResize = () => {
+      if (map.current && mapContainer.current) {
+        // Google Maps에 컨테이너 크기 변경을 알림
+        google.maps.event.trigger(map.current, 'resize');
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
-    <div ref={mapContainer} className={cn("w-full h-[500px]", className)} />
+    <div ref={mapContainer} className={cn("w-full h-[300px] sm:h-[500px] lg:h-[700px]", className)} />
   );
 }
