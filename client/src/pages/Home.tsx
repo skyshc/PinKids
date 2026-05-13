@@ -497,10 +497,6 @@ export default function Home() {
     
     mapReady.current = true;
 
-    const school = { lat: 37.5668, lng: 126.9786 };
-    const academy = { lat: 37.5701, lng: 126.9822 };
-    const home = { lat: 37.5639, lng: 126.9731 };
-
     map.setOptions({
       disableDefaultUI: false,
       mapTypeControl: false,
@@ -518,18 +514,70 @@ export default function Home() {
       ],
     });
 
-    new window.google.maps.Circle({
-      strokeColor: "#17324d",
-      strokeOpacity: 0.85,
-      strokeWeight: 2,
-      fillColor: "#8fd3b6",
-      fillOpacity: 0.24,
-      map,
-      center: school,
-      radius: 380,
-    });
+    // 실제 저장된 위치 데이터를 지도에 표시
+    if (storedLocationsWithCoordinates.length > 0) {
+      const bounds = new window.google.maps.LatLngBounds();
+      
+      storedLocationsWithCoordinates.forEach((location) => {
+        if (location.location) {
+          const position = { lat: location.location.latitude, lng: location.location.longitude };
+          bounds.extend(position);
+          
+          // 사용자 마커 표시 (파란색 원형)
+          const pin = document.createElement("div");
+          pin.className = "map-pin-marker";
+          pin.style.cssText = `
+            width: 32px;
+            height: 32px;
+            background-color: #1d8664;
+            border: 3px solid #17324d;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          `;
+          pin.innerHTML = `<span>${location.displayName?.charAt(0) || "👤"}</span>`;
+          
+          new window.google.maps.marker.AdvancedMarkerElement({
+            map,
+            position,
+            title: `${location.displayName} · 마지막 위치: ${new Date(location.location.recordedAt).toLocaleTimeString()}`,
+            content: pin,
+          });
+        }
+      });
+      
+      // 모든 마커가 보이도록 지도 확대/축소
+      if (storedLocationsWithCoordinates.length === 1) {
+        map.setCenter({
+          lat: storedLocationsWithCoordinates[0].location!.latitude,
+          lng: storedLocationsWithCoordinates[0].location!.longitude,
+        });
+        map.setZoom(15);
+      } else {
+        map.fitBounds(bounds, 50);
+      }
+    } else {
+      // 데모용 기본 위치
+      const school = { lat: 37.5668, lng: 126.9786 };
+      const academy = { lat: 37.5701, lng: 126.9822 };
+      const home = { lat: 37.5639, lng: 126.9731 };
+      
+      new window.google.maps.Circle({
+        strokeColor: "#17324d",
+        strokeOpacity: 0.85,
+        strokeWeight: 2,
+        fillColor: "#8fd3b6",
+        fillOpacity: 0.24,
+        map,
+        center: school,
+        radius: 380,
+      });
 
-    if (storedLocationsWithCoordinates.length === 0) {
       new window.google.maps.Polyline({
         path: [school, academy, home],
         geodesic: true,
@@ -1123,8 +1171,8 @@ export default function Home() {
 
         <section id="map" className="border-y-[3px] border-[#17324d] bg-[#17324d] py-12 sm:py-16 lg:py-20 text-[#fff7e7]">
           <div className="container grid gap-6 sm:gap-8 lg:gap-10 grid-cols-1 lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="overflow-hidden border-[4px] border-[#fff7e7] bg-[#fff7e7] shadow-[12px_12px_0_#f2a37b] w-full">
-              <MapView initialCenter={{ lat: 37.5668, lng: 126.9786 }} initialZoom={15} onMapReady={handleMapReady} className="h-full w-full min-h-[300px] sm:min-h-[500px] lg:min-h-[700px]" />
+            <div className="overflow-hidden border-[4px] border-[#fff7e7] bg-[#fff7e7] shadow-[12px_12px_0_#f2a37b] w-full h-[300px] sm:h-[500px] lg:h-[700px]">
+              <MapView initialCenter={{ lat: 37.5668, lng: 126.9786 }} initialZoom={15} onMapReady={handleMapReady} className="w-full h-full" />
             </div>
             <div className="flex flex-col justify-center">
               <p className="mb-4 inline-flex w-fit items-center gap-2 border-[3px] border-[#fff7e7] bg-[#f2a37b] px-4 py-2 text-sm font-black text-[#17324d] shadow-[4px_4px_0_#fff7e7]"><Radar className="h-4 w-4" /> 실시간 위치 화면</p>
