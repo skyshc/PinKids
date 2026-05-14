@@ -514,6 +514,47 @@ export default function Home() {
       ],
     });
 
+    // 안전 구역 표시 (모든 안전 구역을 원형으로 표시)
+    if (safeZones && safeZones.length > 0) {
+      safeZones.forEach((zone: any) => {
+        const isActive = geofenceAlertsEnabled;
+        const circleColor = isActive ? "#1d8664" : "#999999";
+        const fillColor = isActive ? "#8fd3b6" : "#cccccc";
+        
+        new window.google.maps.Circle({
+          strokeColor: circleColor,
+          strokeOpacity: 0.8,
+          strokeWeight: 3,
+          fillColor: fillColor,
+          fillOpacity: 0.15,
+          map,
+          center: { lat: zone.centerLatitude, lng: zone.centerLongitude },
+          radius: zone.radiusMeters,
+        });
+        
+        // 안전 구역 이름 라벨 추가
+        const labelPin = document.createElement("div");
+        labelPin.style.cssText = `
+          background-color: rgba(255, 255, 255, 0.9);
+          border: 2px solid ${circleColor};
+          border-radius: 4px;
+          padding: 4px 8px;
+          font-size: 12px;
+          font-weight: bold;
+          color: ${circleColor};
+          white-space: nowrap;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        `;
+        labelPin.innerHTML = zone.name;
+        
+        new window.google.maps.marker.AdvancedMarkerElement({
+          map,
+          position: { lat: zone.centerLatitude, lng: zone.centerLongitude },
+          content: labelPin,
+        });
+      });
+    }
+    
     // 실제 저장된 위치 데이터를 지도에 표시
     if (storedLocationsWithCoordinates.length > 0) {
       const bounds = new window.google.maps.LatLngBounds();
@@ -523,24 +564,25 @@ export default function Home() {
           const position = { lat: location.location.latitude, lng: location.location.longitude };
           bounds.extend(position);
           
-          // 사용자 마커 표시 (파란색 원형)
+          // 사용자 마커 표시 (파란 깃발 모양)
           const pin = document.createElement("div");
           pin.className = "map-pin-marker";
           pin.style.cssText = `
-            width: 32px;
-            height: 32px;
-            background-color: #1d8664;
-            border: 3px solid #17324d;
-            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            background-color: #2563eb;
+            border: 3px solid #1e40af;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
             font-weight: bold;
-            font-size: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            font-size: 14px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.4);
           `;
-          pin.innerHTML = `<span>${location.displayName?.charAt(0) || "👤"}</span>`;
+          pin.innerHTML = `<span style="transform: rotate(45deg); display: block;">${location.displayName?.charAt(0) || "📍"}</span>`;
           
           new window.google.maps.marker.AdvancedMarkerElement({
             map,

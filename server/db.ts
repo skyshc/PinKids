@@ -144,6 +144,7 @@ type UpsertLocationPointInput = {
   longitude: number;
   accuracy?: number | null;
   recordedAt?: number;
+  skipGeofenceEvaluation?: boolean;
 };
 
 export async function grantLocationConsent(input: GrantConsentInput) {
@@ -360,7 +361,7 @@ export async function upsertLocationPoint(input: UpsertLocationPointInput) {
     .orderBy(desc(locationPoints.recordedAt))
     .limit(1);
 
-  if (result[0]) {
+  if (result[0] && !input.skipGeofenceEvaluation) {
     await evaluateGeofenceForLocationPoint(result[0], previousLocation);
   }
 

@@ -117,6 +117,7 @@ describe("Location Tracking", () => {
       longitude: 126.9786,
       accuracy: 10,
       recordedAt: Date.now(),
+      skipGeofenceEvaluation: true,
     });
 
     // 두 번째 위치 업데이트
@@ -127,6 +128,7 @@ describe("Location Tracking", () => {
       longitude: 126.9822,
       accuracy: 8,
       recordedAt: Date.now(),
+      skipGeofenceEvaluation: true,
     });
 
     // 위도/경도가 업데이트되어야 함
@@ -163,6 +165,7 @@ describe("Location Tracking", () => {
       longitude: 126.9786,
       accuracy: 10,
       recordedAt: thirtyDaysAgo,
+      skipGeofenceEvaluation: true,
     });
 
     expect(location).toBeDefined();
@@ -198,6 +201,7 @@ describe("Location Tracking", () => {
       longitude,
       accuracy: 10,
       recordedAt: Date.now(),
+      skipGeofenceEvaluation: true,
     });
 
     // 두 번째 업데이트 (같은 좌표)
@@ -208,6 +212,7 @@ describe("Location Tracking", () => {
       longitude,
       accuracy: 10,
       recordedAt: Date.now() + 60000,
+      skipGeofenceEvaluation: true,
     });
 
     // 다른 레코드여야 함
