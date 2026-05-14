@@ -516,12 +516,16 @@ export default function Home() {
 
     // 안전 구역 표시 (모든 안전 구역을 원형으로 표시)
     if (safeZones && safeZones.length > 0) {
+      // InfoWindow 인스턴스 (한 번에 하나만 열기 위해 공유)
+      let activeInfoWindow: google.maps.InfoWindow | null = null;
+      
       safeZones.forEach((zone: any) => {
         const isActive = geofenceAlertsEnabled;
         const circleColor = isActive ? "#1d8664" : "#999999";
         const fillColor = isActive ? "#8fd3b6" : "#cccccc";
         
-        new window.google.maps.Circle({
+        // 안전 구역 원형 생성
+        const circle = new window.google.maps.Circle({
           strokeColor: circleColor,
           strokeOpacity: 0.8,
           strokeWeight: 3,
@@ -530,6 +534,43 @@ export default function Home() {
           map,
           center: { lat: zone.centerLatitude, lng: zone.centerLongitude },
           radius: zone.radiusMeters,
+        });
+        
+        // 원형 클릭 이벤트 리스너 추가
+        circle.addListener("click", () => {
+          // 기존 InfoWindow 닫기
+          if (activeInfoWindow) {
+            activeInfoWindow.close();
+          }
+          
+          // 새 InfoWindow 생성
+          const infoWindowContent = `
+            <div style="padding: 8px; font-family: sans-serif; font-size: 13px;">
+              <div style="font-weight: bold; font-size: 14px; margin-bottom: 6px; color: #17324d;">${zone.name}</div>
+              <div style="color: #51677a; margin-bottom: 4px;">
+                <strong>반경:</strong> ${zone.radiusMeters}m
+              </div>
+              <div style="color: #51677a; font-size: 12px;">
+                <strong>위치:</strong> ${zone.centerLatitude.toFixed(4)}°, ${zone.centerLongitude.toFixed(4)}°
+              </div>
+            </div>
+          `;
+          
+          activeInfoWindow = new window.google.maps.InfoWindow({
+            content: infoWindowContent,
+            position: { lat: zone.centerLatitude, lng: zone.centerLongitude },
+          });
+          
+          activeInfoWindow.open(map);
+        });
+        
+        // 마우스 오버 시 커서 변경
+        circle.addListener("mouseover", () => {
+          map.setOptions({ draggableCursor: "pointer" });
+        });
+        
+        circle.addListener("mouseout", () => {
+          map.setOptions({ draggableCursor: "grab" });
         });
         
         // 안전 구역 이름 라벨 추가
@@ -544,6 +585,7 @@ export default function Home() {
           color: ${circleColor};
           white-space: nowrap;
           box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+          cursor: pointer;
         `;
         labelPin.innerHTML = zone.name;
         
