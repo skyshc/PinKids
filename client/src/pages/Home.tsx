@@ -162,6 +162,8 @@ export default function Home() {
   const [safeZoneName, setSafeZoneName] = useState("우리 집");
   const [safeZoneRadius, setSafeZoneRadius] = useState(300);
   const [safeZoneCenter, setSafeZoneCenter] = useState({ lat: 37.5668, lng: 126.9786 });
+  const [isSelectingZoneLocation, setIsSelectingZoneLocation] = useState(false);
+  const [selectedZoneMarker, setSelectedZoneMarker] = useState<google.maps.marker.AdvancedMarkerElement | null>(null);
   const loginProviderLabel = user?.loginMethod === "google" ? "구글" : user?.loginMethod === "kakao" ? "카카오톡" : "소셜";
   const locationPanelCopy = getLocationPermissionPanelCopy(locationPermission);
   const isLocationBusy = locationPermission === "checking" || locationPermission === "requesting";
@@ -784,6 +786,50 @@ export default function Home() {
     });
   };
 
+  const handleMapClickForZoneSelection = (event: google.maps.MapMouseEvent) => {
+    if (!isSelectingZoneLocation || !event.latLng) return;
+    
+    const lat = event.latLng.lat();
+    const lng = event.latLng.lng();
+    
+    // 기존 마커 제거
+    if (selectedZoneMarker) {
+      selectedZoneMarker.map = null;
+    }
+    
+    // 새 마커 생성
+    const pin = document.createElement("div");
+    pin.style.cssText = `
+      width: 40px;
+      height: 40px;
+      background-color: #f2a37b;
+      border: 3px solid #17324d;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 20px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+    `;
+    pin.innerHTML = "📍";
+    
+    const marker = new window.google.maps.marker.AdvancedMarkerElement({
+      map: mapInstanceRef.current,
+      position: { lat, lng },
+      content: pin,
+      title: "선택된 안전 구역 위치",
+    });
+    
+    setSelectedZoneMarker(marker);
+    setSafeZoneCenter({ lat, lng });
+    
+    toast("안전 구역 위치가 선택되었습니다.", {
+      description: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+    });
+  };
+
   const createSafeZone = async () => {
     if (!primaryFamilyId) {
       toast("보호자 가족 그룹이 필요합니다.", {
@@ -1252,7 +1298,7 @@ export default function Home() {
         <section id="map" className="border-y-[3px] border-[#17324d] bg-[#17324d] py-12 sm:py-16 lg:py-20 text-[#fff7e7]">
           <div className="container grid gap-6 sm:gap-8 lg:gap-10 grid-cols-1 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="overflow-hidden border-[4px] border-[#fff7e7] bg-[#fff7e7] shadow-[12px_12px_0_#f2a37b] w-full h-[300px] sm:h-[500px] lg:h-[700px]">
-              <MapView initialCenter={{ lat: 37.5668, lng: 126.9786 }} initialZoom={15} onMapReady={handleMapReady} className="w-full h-full" />
+              <MapView initialCenter={{ lat: 37.5668, lng: 126.9786 }} initialZoom={15} onMapReady={handleMapReady} onClick={handleMapClickForZoneSelection} className="w-full h-full" />
             </div>
             <div className="flex flex-col justify-center">
               <p className="mb-4 inline-flex w-fit items-center gap-2 border-[3px] border-[#fff7e7] bg-[#f2a37b] px-4 py-2 text-sm font-black text-[#17324d] shadow-[4px_4px_0_#fff7e7]"><Radar className="h-4 w-4" /> 실시간 위치 화면</p>
@@ -1368,6 +1414,24 @@ export default function Home() {
                   </label>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
+                  <Button 
+                    onClick={() => {
+                      setIsSelectingZoneLocation(!isSelectingZoneLocation);
+                      if (!isSelectingZoneLocation) {
+                        toast("지도 클릭 모드 활성화", {
+                          description: "지도에서 안전 구역으로 설정할 위치를 클릭하세요.",
+                        });
+                      } else {
+                        toast("지도 클릭 모드 비활성화", {
+                          description: "안전 구역 선택이 취소되었습니다.",
+                        });
+                      }
+                    }} 
+                    variant={isSelectingZoneLocation ? "default" : "outline"} 
+                    className={`border-[3px] border-[#17324d] font-black shadow-[4px_4px_0_#17324d] ${isSelectingZoneLocation ? 'bg-[#f2a37b] text-[#17324d]' : 'bg-[#fff7e7]'} hover:bg-white`}
+                  >
+                    {isSelectingZoneLocation ? '✓ 지도에서 선택 중' : '지도에서 선택'}
+                  </Button>
                   <Button onClick={useCurrentMapCenterForSafeZone} variant="outline" className="border-[3px] border-[#17324d] bg-[#fff7e7] font-black shadow-[4px_4px_0_#17324d] hover:bg-white">지도 중심 좌표 사용</Button>
                   <Button onClick={() => void createSafeZone()} disabled={!primaryFamilyId || createSafeZoneMutation.isPending} className="border-[3px] border-[#17324d] bg-[#17324d] font-black text-[#fff7e7] shadow-[4px_4px_0_#8fd3b6] hover:bg-[#254462] disabled:opacity-60">안전 구역 저장</Button>
                 </div>

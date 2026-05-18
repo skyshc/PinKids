@@ -114,6 +114,7 @@ interface MapViewProps {
   initialCenter?: google.maps.LatLngLiteral;
   initialZoom?: number;
   onMapReady?: (map: google.maps.Map) => void;
+  onClick?: (event: google.maps.MapMouseEvent) => void;
 }
 
 export function MapView({
@@ -121,6 +122,7 @@ export function MapView({
   initialCenter = { lat: 37.7749, lng: -122.4194 },
   initialZoom = 12,
   onMapReady,
+  onClick,
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
@@ -140,6 +142,7 @@ export function MapView({
       streetViewControl: true,
       mapId: "DEMO_MAP_ID",
     });
+    
     if (onMapReady) {
       onMapReady(map.current);
     }
@@ -148,6 +151,16 @@ export function MapView({
   useEffect(() => {
     init();
   }, [init]);
+
+  // onClick 핸들러가 변경될 때마다 리스너 업데이트
+  useEffect(() => {
+    if (!map.current || !onClick) return;
+    
+    const listener = map.current.addListener('click', onClick);
+    return () => {
+      listener.remove();
+    };
+  }, [onClick]);
 
   // 창 크기 변경 시 지도 크기 재조정
   useEffect(() => {
