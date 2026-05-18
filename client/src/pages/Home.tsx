@@ -1470,7 +1470,13 @@ export default function Home() {
                           <p className="font-black">{zone.name} · 반경 {zone.radiusMeters}m</p>
                           <p className="mt-1 text-[#51677a]">좌표 {zone.centerLatitude.toFixed(4)}, {zone.centerLongitude.toFixed(4)} · {zone.alertsEnabled ? "개별 알림 켜짐" : "개별 알림 꺼짐"}</p>
                         </div>
-                        <Button onClick={() => void deleteSafeZoneMutation.mutateAsync({ id: zone.id })} disabled={deleteSafeZoneMutation.isPending} variant="outline" className="h-9 border-[2px] border-[#17324d] bg-[#fff7e7] text-xs font-black hover:bg-white">비활성화</Button>
+                        <div className="flex gap-2">
+                          <Button onClick={() => {
+                            if (confirm(`\'${zone.name}\' 구역을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
+                              void deleteSafeZoneMutation.mutateAsync({ id: zone.id });
+                            }
+                          }} disabled={deleteSafeZoneMutation.isPending} variant="outline" className="h-9 w-9 border-[2px] border-[#17324d] bg-[#fff7e7] p-0 hover:bg-[#ffe8cd]"><Trash2 className="h-4 w-4 text-[#d9534f]" /></Button>
+                        </div>
                       </div>
                     ))
                   )}
