@@ -662,21 +662,7 @@ export default function Home() {
         radius: 380,
       });
 
-      new window.google.maps.Polyline({
-        path: [school, academy, home],
-        geodesic: true,
-        strokeColor: "#17324d",
-        strokeOpacity: 0.5,
-        strokeWeight: 3,
-        icons: [
-          {
-            icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 4 },
-            offset: "0",
-            repeat: "20px",
-          },
-        ],
-        map,
-      });
+      // Polyline 제거 - 불필요한 이동선
     }
   };
 
@@ -935,21 +921,31 @@ export default function Home() {
         title: `${item.displayName} · 저장된 최신 위치`,
         content: pin,
       });
+
+      // 마커 클릭 시 InfoWindow 표시
+      const infoWindow = new window.google.maps.InfoWindow({
+        content: `
+          <div style="padding: 12px; font-family: sans-serif; color: #17324d;">
+            <div style="font-weight: bold; font-size: 14px; margin-bottom: 6px; color: #17324d;">${item.displayName}</div>
+            <div style="font-size: 12px; color: #51677a; margin-bottom: 4px;">
+              <strong>위치:</strong> ${item.location.latitude.toFixed(4)}, ${item.location.longitude.toFixed(4)}
+            </div>
+            <div style="font-size: 12px; color: #51677a;">
+              <strong>마지막 업데이트:</strong> ${new Date(item.location.recordedAt).toLocaleString('ko-KR')}
+            </div>
+          </div>
+        `,
+      });
+
+      pin.addEventListener('click', () => {
+        infoWindow.open(mapInstanceRef.current, marker);
+      });
       familyMarkerRefs.current.push(marker);
       bounds.extend(position);
       path.push(position);
     });
 
-    if (path.length >= 2) {
-      familyPathRef.current = new window.google.maps.Polyline({
-        path,
-        geodesic: true,
-        strokeColor: "#f2a37b",
-        strokeOpacity: 0.95,
-        strokeWeight: 5,
-        map: mapInstanceRef.current,
-      });
-    }
+    // Polyline 제거 - 불필요한 이동선
 
     if (path.length > 0) {
       mapInstanceRef.current.fitBounds(bounds, 72);
