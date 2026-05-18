@@ -654,18 +654,7 @@ export default function Home() {
       const academy = { lat: 37.5701, lng: 126.9822 };
       const home = { lat: 37.5639, lng: 126.9731 };
       
-      new window.google.maps.Circle({
-        strokeColor: "#17324d",
-        strokeOpacity: 0.85,
-        strokeWeight: 2,
-        fillColor: "#8fd3b6",
-        fillOpacity: 0.24,
-        map,
-        center: school,
-        radius: 380,
-      });
-
-      // Polyline 제거 - 불필요한 이동선
+      // 데모 데이터 제거 - 실제 데이터는 데이터베이스에서 로드
     }
   };
 
