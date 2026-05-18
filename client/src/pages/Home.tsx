@@ -164,6 +164,7 @@ export default function Home() {
   const [safeZoneCenter, setSafeZoneCenter] = useState({ lat: 37.5668, lng: 126.9786 });
   const [isSelectingZoneLocation, setIsSelectingZoneLocation] = useState(false);
   const [selectedZoneMarker, setSelectedZoneMarker] = useState<google.maps.marker.AdvancedMarkerElement | null>(null);
+  const selectedZoneInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
   const loginProviderLabel = user?.loginMethod === "google" ? "구글" : user?.loginMethod === "kakao" ? "카카오톡" : "소셜";
   const locationPanelCopy = getLocationPermissionPanelCopy(locationPermission);
   const isLocationBusy = locationPermission === "checking" || locationPermission === "requesting";
@@ -792,9 +793,12 @@ export default function Home() {
     const lat = event.latLng.lat();
     const lng = event.latLng.lng();
     
-    // 기존 마커 제거
+    // 기존 마커와 InfoWindow 제거
     if (selectedZoneMarker) {
       selectedZoneMarker.map = null;
+    }
+    if (selectedZoneInfoWindowRef.current) {
+      selectedZoneInfoWindowRef.current.close();
     }
     
     // 새 마커 생성
@@ -822,7 +826,20 @@ export default function Home() {
       title: "선택된 안전 구역 위치",
     });
     
+    // InfoWindow 생성 및 표시
+    const infoWindow = new window.google.maps.InfoWindow({
+      content: `
+        <div style="padding: 10px; font-family: Arial, sans-serif;">
+          <div style="font-weight: bold; color: #17324d; margin-bottom: 5px;">${safeZoneName || '안전 구역'}</div>
+          <div style="font-size: 12px; color: #51677a;">${lat.toFixed(5)}, ${lng.toFixed(5)}</div>
+        </div>
+      `,
+    });
+    
+    infoWindow.open(mapInstanceRef.current, marker);
+    
     setSelectedZoneMarker(marker);
+    selectedZoneInfoWindowRef.current = infoWindow;
     setSafeZoneCenter({ lat, lng });
     
     toast("안전 구역 위치가 선택되었습니다.", {
