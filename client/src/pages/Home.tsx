@@ -1176,11 +1176,9 @@ export default function Home() {
     <div className="min-h-screen overflow-hidden bg-[#fff7e7] text-[#17324d] paper-grain">
       <header className="sticky top-0 z-50 border-b-[3px] border-[#17324d] bg-[#fff7e7]/92 backdrop-blur-xl">
         <nav className="container flex h-20 items-center justify-between gap-6">
-          <a href="#top" className="group flex items-center gap-3" aria-label="아이안심 홈">
-            <span className="flex h-11 w-11 rotate-[-4deg] items-center justify-center border-[3px] border-[#17324d] bg-[#8fd3b6] shadow-[5px_5px_0_#17324d] transition-transform group-hover:rotate-0 group-hover:translate-x-0.5 group-hover:translate-y-0.5">
-              <ShieldCheck className="h-6 w-6" />
-            </span>
-            <span className="font-display text-2xl tracking-tight">아이안심</span>
+          <a href="#top" className="group flex items-center gap-3" aria-label="핀키즈 홈">
+            <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663647991675/fuW72okeNRT65TWogzSyTX/pinkids_logo-bLUfJu9Gwp7PMy3dAmMaey.webp" alt="Pinkids" className="h-11 w-11 transition-transform group-hover:scale-110" />
+            <span className="font-display text-2xl tracking-tight">핀키즈</span>
           </a>
           <div className="hidden items-center gap-8 text-sm font-bold md:flex">
             <a href="#features" className="hover:underline hover:decoration-[3px] hover:underline-offset-8">기능</a>
