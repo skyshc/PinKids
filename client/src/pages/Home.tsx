@@ -649,12 +649,10 @@ export default function Home() {
         map.fitBounds(bounds, 50);
       }
     } else {
-      // 데모용 기본 위치
-      const school = { lat: 37.5668, lng: 126.9786 };
-      const academy = { lat: 37.5701, lng: 126.9822 };
-      const home = { lat: 37.5639, lng: 126.9731 };
-      
-      // 데모 데이터 제거 - 실제 데이터는 데이터베이스에서 로드
+      // 위치 데이터가 없을 때 기본 중심좌표 설정 (서울 시내)
+      const defaultCenter = { lat: 37.5665, lng: 126.9780 };
+      map.setCenter(defaultCenter);
+      map.setZoom(13);
     }
   };
 
