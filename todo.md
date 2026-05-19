@@ -190,3 +190,17 @@
   - [x] 배너 텍스트 "아이안심" → "핸키즈(Pinkids)" 변경
   - [x] 핸키즈 로고 아이콘 생성 (AI 이미지)
   - [x] 아이콘 프로젝트에 적용 (favicon, 배너 로고)
+
+## 페이지 분리 및 공통 레이아웃 구성 (사용자 요청)
+
+- [x] 공통 Header 컴포넌트 분리 (AppHeader.tsx - 네비게이션 포함)
+- [x] 공통 Footer 컴포넌트 분리 (AppFooter.tsx)
+- [x] 로그인 팝업(OnboardingModal) 공통 컴포넌트로 분리 (OnboardingModalContext + OnboardingModal.tsx)
+- [x] AppLayout.tsx 공통 레이아웃 래퍼 생성 (Header + Footer + OnboardingModal)
+- [x] 기능(Features) 페이지 분리 (/features)
+- [x] 위치보기(MapViewPage) 페이지 분리 (/map)
+- [x] 사용방법(HowTo) 페이지 분리 (/how-to)
+- [x] App.tsx 라우팅 설정 (3개 페이지 + 공통 레이아웃)
+- [x] Home.tsx 랜딩 페이지 전용으로 리팩토링
+- [x] 모든 페이지에서 비로그인 시 OnboardingModal 유도 UI 적용
+- [x] 페이지 분리 후 테스트 통과 확인 (49개 테스트 모두 통과)

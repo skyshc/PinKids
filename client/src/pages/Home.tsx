@@ -1,60 +1,30 @@
 /*
  * Design reminder: 따뜻한 네오-브루탈리즘 기반 가족 안전 서비스.
  * 이 페이지는 크림색 종이 질감, 굵은 네이비 경계, 민트 안전 신호, 살구색 강조, 비대칭 관제형 레이아웃을 유지한다.
- * 모든 선택은 “자녀 위치를 빠르게 확인하고 부모가 안심한다”는 철학을 강화해야 한다.
+ * 모든 선택은 "자녀 위치를 빠르게 확인하고 부모가 안심한다"는 철학을 강화해야 한다.
  */
 
+import AppLayout from "@/components/AppLayout";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { MapView } from "@/components/Map";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { getLoginUrl } from "@/const";
-import { trpc } from "@/lib/trpc";
+import { useOnboardingModal } from "@/contexts/OnboardingModalContext";
 import {
-  BROWSER_SETTING_GUIDES,
-  LOCATION_PERMISSION_EXPLANATIONS,
-  LOCATION_PERMISSION_REQUEST_OPTIONS,
-  getLocationPermissionPanelCopy,
-  getLocationPermissionStatusLabel,
-  mapBrowserPermissionState,
-  queryGeolocationPermission,
-  type LocationPermissionUiState,
-} from "@/lib/locationPermission";
-import { buildSocialLoginUrl, type SocialLoginProvider } from "@/lib/socialLogin";
-import QRCode from "qrcode";
-import { toast } from "sonner";
-import {
-  AlertTriangle,
   BellRing,
   CheckCircle2,
   ChevronRight,
-  Chrome,
   Clock3,
-  Copy,
-  Link as LinkIcon,
   Home as HomeIcon,
-  KeyRound,
   LocateFixed,
-  LockKeyhole,
-  LogOut,
   MapPin,
-  MapPinned,
   MessageCircle,
   Navigation,
-  PauseCircle,
   Radar,
-  RotateCcw,
   School,
-  Settings,
-  Share2,
   ShieldCheck,
   Smartphone,
-  Trash2,
-  UserRound,
-  UsersRound,
-  X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
 
 const HERO_IMAGE =
   "https://d2xsxph8kpxj0f.cloudfront.net/310519663647991675/fuW72okeNRT65TWogzSyTX/child_location_hero_dashboard-gsGWabhdq5GiwvnTrenu9a.webp";
@@ -64,27 +34,9 @@ const CHECKIN_IMAGE =
   "https://d2xsxph8kpxj0f.cloudfront.net/310519663647991675/fuW72okeNRT65TWogzSyTX/family_checkin_cards-4CKchbXzvvatvQuYwCk4NE.webp";
 
 const children = [
-  {
-    name: "지우",
-    place: "학교 근처",
-    status: "안전 반경 안",
-    time: "방금 전",
-    accent: "mint",
-  },
-  {
-    name: "하준",
-    place: "학원 도착",
-    status: "체크인 완료",
-    time: "12분 전",
-    accent: "peach",
-  },
-  {
-    name: "서윤",
-    place: "집으로 이동 중",
-    status: "경로 공유 중",
-    time: "24분 전",
-    accent: "navy",
-  },
+  { name: "지우", place: "학교 근처", status: "안전 반경 안", time: "방금 전", accent: "mint" },
+  { name: "하준", place: "학원 도착", status: "체크인 완료", time: "12분 전", accent: "peach" },
+  { name: "서윤", place: "집으로 이동 중", status: "경로 공유 중", time: "24분 전", accent: "navy" },
 ];
 
 const features = [
@@ -112,1792 +64,269 @@ const timeline = [
   { label: "집 반경 접근", time: "예상 18:12", icon: HomeIcon },
 ];
 
-const onboardingSteps = [
-  {
-    eyebrow: "1단계 · 간편 소셜 로그인",
-    title: "카카오톡이나 구글 계정으로 빠르게 시작해요.",
-    description: "보호자가 이미 쓰는 계정으로 먼저 로그인한 뒤, 가족 역할과 위치 정보 동의를 차례로 확인합니다. 선택한 소셜 로그인 방식은 인증 포털에 전달됩니다.",
-    icon: KeyRound,
-  },
-  {
-    eyebrow: "2단계 · 가족 역할 선택",
-    title: "누가 위치를 보고, 누가 공유할지 정합니다.",
-    description: "부모, 보호자, 자녀 역할을 나누면 위치 정보가 필요한 사람에게만 보이도록 안내할 수 있습니다.",
-    icon: UsersRound,
-  },
-  {
-    eyebrow: "3단계 · 위치 정보 동의",
-    title: "위치 정보 제공은 명확한 동의 뒤에만 시작됩니다.",
-    description: "브라우저 위치 권한 요청을 통해 현재 기기의 위치 제공 여부를 선택합니다. 거절해도 데모 화면은 계속 볼 수 있습니다.",
-    icon: MapPinned,
-  },
-  {
-    eyebrow: "준비 완료",
-    title: "이제 가족 위치 화면으로 이동할 수 있어요.",
-    description: "온보딩이 끝나면 다음 방문부터는 바로 메인 화면을 보여줍니다. 언제든 시작 버튼으로 이 흐름을 다시 열 수 있습니다.",
-    icon: ShieldCheck,
-  },
+const benefits = [
+  { icon: CheckCircle2, title: "3초 위치 확인", desc: "앱 없이 브라우저에서 바로 확인" },
+  { icon: ShieldCheck, title: "동의 기반 공유", desc: "명시적 동의 후에만 위치 저장" },
+  { icon: Smartphone, title: "모바일 최적화", desc: "스마트폰에서도 편하게 사용" },
 ];
 
 export default function Home() {
-  // The userAuth hooks provides authentication state
-  // To implement login/logout functionality, simply call logout() or redirect to getLoginUrl()
-  let { user, loading, error, isAuthenticated, logout } = useAuth();
-
-  const mapReady = useRef(false);
-  const mapInstanceRef = useRef<google.maps.Map | null>(null);
-  const familyMarkerRefs = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
-  const familyPathRef = useRef<google.maps.Polyline | null>(null);
-  const safeZoneCircleRefs = useRef<google.maps.Circle[]>([]);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [onboardingStep, setOnboardingStep] = useState(0);
-  const [guardianName, setGuardianName] = useState("민지 보호자");
-  const [familyRole, setFamilyRole] = useState("부모");
-  const [locationPermission, setLocationPermission] = useState<LocationPermissionUiState>("idle");
-  const [locationPermissionMessage, setLocationPermissionMessage] = useState("");
-  const [showLocationSettingsGuide, setShowLocationSettingsGuide] = useState(false);
-  const [inviteRole, setInviteRole] = useState<"child" | "guardian">("child");
-  const [createdInviteUrl, setCreatedInviteUrl] = useState("");
-  const [inviteQrCodeUrl, setInviteQrCodeUrl] = useState("");
-  const [safeZoneName, setSafeZoneName] = useState("우리 집");
-  const [safeZoneRadius, setSafeZoneRadius] = useState(300);
-  const [safeZoneCenter, setSafeZoneCenter] = useState({ lat: 37.5668, lng: 126.9786 });
-  const [isSelectingZoneLocation, setIsSelectingZoneLocation] = useState(false);
-  const [selectedZoneMarker, setSelectedZoneMarker] = useState<google.maps.marker.AdvancedMarkerElement | null>(null);
-  const selectedZoneInfoWindowRef = useRef<google.maps.InfoWindow | null>(null);
-  const loginProviderLabel = user?.loginMethod === "google" ? "구글" : user?.loginMethod === "kakao" ? "카카오톡" : "소셜";
-  const locationPanelCopy = getLocationPermissionPanelCopy(locationPermission);
-  const isLocationBusy = locationPermission === "checking" || locationPermission === "requesting";
-  const apiFamilyRole = familyRole === "자녀" ? "child" : "guardian";
-  const trpcUtils = trpc.useUtils();
-  const consentStatusQuery = trpc.consent.getStatus.useQuery(undefined, { enabled: isAuthenticated });
-  const familyMembershipsQuery = trpc.family.myMemberships.useQuery(undefined, { enabled: isAuthenticated });
-  const familyLocationsQuery = trpc.location.getFamilyLocations.useQuery(undefined, {
-    enabled: isAuthenticated,
-    // 새로 로그인한 사용자는 아직 가족 그룹에 속하지 않아 403 오류가 발생할 수 있으므로, 에러 시 빈 배열 반환
-    retry: false,
-  });
-  const grantConsentMutation = trpc.consent.grant.useMutation({
-    onSuccess: async () => {
-      await Promise.all([trpcUtils.consent.getStatus.invalidate(), trpcUtils.family.myMemberships.invalidate()]);
-    },
-  });
-  const revokeConsentMutation = trpc.consent.revoke.useMutation({
-    onSuccess: async () => {
-      await Promise.all([trpcUtils.consent.getStatus.invalidate(), trpcUtils.location.getFamilyLocations.invalidate()]);
-    },
-  });
-  const pauseSharingMutation = trpc.location.pauseSharing.useMutation({
-    onSuccess: async () => {
-      await trpcUtils.location.getFamilyLocations.invalidate();
-    },
-  });
-  const deleteHistoryMutation = trpc.location.deleteHistory.useMutation({
-    onSuccess: async () => {
-      await Promise.all([trpcUtils.consent.getStatus.invalidate(), trpcUtils.location.getFamilyLocations.invalidate()]);
-    },
-  });
-  const createSafeZoneMutation = trpc.safeZones.create.useMutation({
-    onSuccess: async () => {
-      await trpcUtils.safeZones.list.invalidate();
-      toast("안전 구역을 저장했습니다.", {
-        description: "이후 위치 업데이트부터 진입·이탈 이벤트를 기록합니다.",
-      });
-    },
-    onError: (error) => {
-      toast.error("안전 구역 저장에 실패했습니다.", {
-        description: error.message || "보호자 권한과 입력값을 확인해주세요.",
-      });
-    },
-  });
-  const deleteSafeZoneMutation = trpc.safeZones.delete.useMutation({
-    onSuccess: async () => {
-      await trpcUtils.safeZones.list.invalidate();
-      toast("안전 구역을 비활성화했습니다.", {
-        description: "기존 알림 기록은 보관하되 새 이탈 판정에는 사용하지 않습니다.",
-      });
-    },
-  });
-  const setAlertSettingMutation = trpc.alertSettings.set.useMutation({
-    onSuccess: async () => {
-      await trpcUtils.alertSettings.get.invalidate();
-    },
-  });
-  const acknowledgeAlertMutation = trpc.locationAlerts.acknowledge.useMutation({
-    onSuccess: async () => {
-      await trpcUtils.locationAlerts.list.invalidate();
-    },
-  });
-  const createInviteLinkMutation = trpc.invites.create.useMutation({
-    onSuccess: async (result) => {
-      const inviteUrl = `${window.location.origin}/invite/${result.link.token}`;
-      setCreatedInviteUrl(inviteUrl);
-      await trpcUtils.invites.getFamilyLinks.invalidate();
-      toast("가족 초대 링크가 생성되었습니다.", {
-        description: "24시간 동안 사용할 수 있는 초대 링크를 복사하거나 공유할 수 있습니다.",
-      });
-    },
-    onError: (error) => {
-      toast.error("초대 링크 생성에 실패했습니다.", {
-        description: error.message || "보호자 권한과 네트워크 상태를 확인해주세요.",
-      });
-    },
-  });
-  const revokeInviteLinkMutation = trpc.invites.revoke.useMutation({
-    onSuccess: async () => {
-      setCreatedInviteUrl("");
-      setInviteQrCodeUrl("");
-      await trpcUtils.invites.getFamilyLinks.invalidate();
-      toast("초대 링크를 취소했습니다.", {
-        description: "취소된 링크로는 더 이상 가족 그룹에 참여할 수 없습니다.",
-      });
-    },
-    onError: (error) => {
-      toast.error("초대 링크 취소에 실패했습니다.", {
-        description: error.message || "잠시 후 다시 시도해주세요.",
-      });
-    },
-  });
-  const updateLocationMutation = trpc.location.updateCurrent.useMutation({
-    onSuccess: async () => {
-      await trpcUtils.location.getFamilyLocations.invalidate();
-    },
-    onError: (error) => {
-      // Phase 1-2: 위치 업로드 실패 시 사용자 UI 피드백
-      const errorMessage = 
-        error.data?.code === "FORBIDDEN" ? "위치 공유 권한이 없습니다" :
-        error.data?.code === "UNAUTHORIZED" ? "다시 로그인해주세요" :
-        "위치 업로드에 실패했습니다. 잠시 후 다시 시도합니다.";
-      
-      toast.error(errorMessage, {
-        description: "자동으로 5분 후 다시 시도합니다",
-        duration: 5000,
-      });
-      console.warn("Failed to update location:", error.message);
-    },
-  });
-  const storedFamilyLocations = familyLocationsQuery.data?.locations ?? [];
-  const storedLocationsWithCoordinates = storedFamilyLocations.filter(item => item.location);
-  const primaryGuardianMembership = familyMembershipsQuery.data?.memberships.find(member => member.role === "guardian" && member.inviteStatus === "accepted");
-  const primaryFamilyId = primaryGuardianMembership?.familyId ?? 0;
-  const familyInviteLinksQuery = trpc.invites.getFamilyLinks.useQuery(
-    { familyId: primaryFamilyId },
-    { enabled: Boolean(primaryGuardianMembership), retry: false },
-  );
-  const safeZonesQuery = trpc.safeZones.list.useQuery(
-    { familyId: primaryFamilyId },
-    { enabled: Boolean(primaryGuardianMembership), retry: false },
-  );
-  const locationAlertsQuery = trpc.locationAlerts.list.useQuery(
-    { familyId: primaryFamilyId, limit: 8 },
-    { enabled: Boolean(primaryGuardianMembership), retry: false },
-  );
-  const alertSettingQuery = trpc.alertSettings.get.useQuery(
-    { familyId: primaryFamilyId },
-    { enabled: Boolean(primaryGuardianMembership), retry: false },
-  );
-  const utils = trpc.useUtils();
-  const setAlertChannelsMutation = trpc.alertSettings.setChannels.useMutation({
-    onSuccess: () => {
-      void utils.alertSettings.get.invalidate({ familyId: primaryFamilyId });
-    },
-  });
-  const activeInviteLinks = familyInviteLinksQuery.data?.links.filter(link => !link.usedAt && !link.revokedAt && link.expiresAt > Date.now()) ?? [];
-  const safeZones = safeZonesQuery.data?.zones ?? [];
-  const recentLocationAlerts = locationAlertsQuery.data?.alerts ?? [];
-  const geofenceAlertsEnabled = alertSettingQuery.data?.setting.geofenceAlertsEnabled ?? true;
-  const alertChannels = (alertSettingQuery.data?.setting.alertChannels ?? ["push"]) as ("push" | "email" | "sms")[];
-  const hasActiveStoredConsent = consentStatusQuery.data?.active ?? false;
-  const locationRetentionDays = familyLocationsQuery.data?.retentionDays ?? 30;
-  const familyLocationsError = familyLocationsQuery.error;
-  const isFamilyLocationsNotFound = familyLocationsError?.data?.code === "FORBIDDEN";
-
-  // 현재 사용자의 위치가 저장되었는지 확인
-  const currentUserLocation = storedFamilyLocations.find(item => item.userId === user?.id);
-
-  const toggleAlertChannel = async (channel: "push" | "email" | "sms") => {
-    if (!primaryFamilyId) return;
-    const currentChannels = (alertChannels as string[]);
-    const newChannels = currentChannels.includes(channel)
-      ? currentChannels.filter(c => c !== channel)
-      : [...currentChannels, channel];
-    if (newChannels.length === 0) {
-      toast("최소 하나의 알림 채널을 선택해야 합니다.");
-      return;
-    }
-    try {
-      await setAlertChannelsMutation.mutateAsync({ familyId: primaryFamilyId, alertChannels: newChannels as ("push" | "email" | "sms")[] });
-      toast(`알림 채널이 업데이트되었습니다: ${newChannels.join(", ")}`);
-    } catch (error) {
-      toast("알림 채널 설정 실패");
-    }
-  };
-
-  const currentStep = onboardingSteps[onboardingStep];
-  const CurrentStepIcon = currentStep.icon;
-  const progressWidth = `${((onboardingStep + 1) / onboardingSteps.length) * 100}%`;
-
-  const channelLabels = {
-    push: "푸시 알림",
-    email: "이메일",
-    sms: "문자 메시지",
-  } as const;
-
-  useEffect(() => {
-    if (user?.name) {
-      setGuardianName(`${user.name} 보호자`);
-    }
-  }, [user?.name]);
-
-  // 위치 변경 감지를 위한 ref (이전 위치 저장)
-  const lastLocationRef = useRef<{ lat: number; lng: number } | null>(null);
-  const LOCATION_CHANGE_THRESHOLD = 10; // 10미터 이상 변경 시만 업로드
-
-  // 두 좌표 사이의 거리 계산 (Haversine formula)
-  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
-    const R = 6371000; // 지구 반지름 (미터)
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLng = ((lng2 - lng1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // 거리 (미터)
-  };
-
-  // 로그인 후 5분마다 현재 위치를 자동으로 감지하고 업로드
-  useEffect(() => {
-    if (!isAuthenticated || !user?.id) return;
-    // 온보딩 완료 전에는 위치 추적 시작 안 함
-    if (showOnboarding) {
-      console.info("Location tracking skipped: onboarding in progress");
-      return;
-    }
-    // Phase 1-1: 위치 동의 확인 - 미동의 사용자는 위치 추적 안 함
-    if (!hasActiveStoredConsent) {
-      console.info("Location tracking skipped: no active consent");
-      return;
-    }
-    if (!navigator.geolocation) {
-      console.warn("Geolocation not supported");
-      return;
-    }
-
-    let isMounted = true;
-    let intervalId: NodeJS.Timeout | null = null;
-
-    const updateLocation = () => {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          if (!isMounted) return;
-          const { latitude, longitude, accuracy } = position.coords;
-          const recordedAt = new Date().getTime();
-          
-          // 위치 변경 감지: 이전 위치와 비교해서 변경되었을 때만 업로드
-          if (lastLocationRef.current) {
-            const distance = calculateDistance(
-              lastLocationRef.current.lat,
-              lastLocationRef.current.lng,
-              latitude,
-              longitude
-            );
-            if (distance < LOCATION_CHANGE_THRESHOLD) {
-              console.info(`Location change too small (${distance.toFixed(1)}m < ${LOCATION_CHANGE_THRESHOLD}m), skipping upload`);
-              return;
-            }
-          }
-          
-          // 위치 업로드
-          lastLocationRef.current = { lat: latitude, lng: longitude };
-          updateLocationMutation.mutate({
-            latitude,
-            longitude,
-            accuracy: accuracy ?? undefined,
-            recordedAt,
-          });
-        },
-        (error) => {
-          if (!isMounted) return;
-          // Phase 1-3: Geolocation 에러 핸들링
-          console.warn("Geolocation error:", error.message);
-        },
-        { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
-      );
-    };
-
-    // 즉시 첫 위치 업데이트
-    updateLocation();
-
-    // 5분(300,000ms)마다 위치 업데이트
-    intervalId = setInterval(updateLocation, 5 * 60 * 1000);
-
-    return () => {
-      isMounted = false;
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isAuthenticated, user?.id, hasActiveStoredConsent, updateLocationMutation]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      try {
-        const hasCompleted = window.localStorage.getItem("child-location-onboarding-complete");
-        if (!hasCompleted && !isAuthenticated) setShowOnboarding(true);
-      } catch {
-        if (!isAuthenticated) setShowOnboarding(true);
-      }
-    }, 450);
-
-    return () => window.clearTimeout(timer);
-  }, [isAuthenticated]);
-
-  // 온보딩 중 위치 권한 확인 (로그인 후 자동 위치 추적과는 별개)
-  useEffect(() => {
-    if (!showOnboarding || onboardingStep !== 2) return;
-    if (locationPermission === "granted" || locationPermission === "requesting") return;
-
-    let isMounted = true;
-
-    const checkPermission = async () => {
-      if (!navigator.geolocation) {
-        if (!isMounted) return;
-        setLocationPermission("unsupported");
-        setLocationPermissionMessage("이 브라우저에서는 위치 권한 요청을 사용할 수 없습니다. 위치 없이 데모를 계속할 수 있습니다.");
-        return;
-      }
-
-      setLocationPermission("checking");
-      const browserState = await queryGeolocationPermission();
-      if (!isMounted) return;
-
-      const nextState = mapBrowserPermissionState(browserState);
-      setLocationPermission(nextState);
-      setLocationPermissionMessage(
-        browserState === "denied"
-          ? "브라우저가 이미 위치 권한을 차단했습니다. 아래 설정 안내를 확인한 뒤 다시 시도해주세요."
-          : browserState === "granted"
-            ? "이미 이 사이트의 위치 권한이 허용되어 있습니다."
-            : "아직 위치 권한을 요청하지 않았습니다. 안내를 확인한 뒤 직접 요청할 수 있습니다.",
-      );
-      setShowLocationSettingsGuide(browserState === "denied");
-    };
-
-    void checkPermission();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [onboardingStep, showOnboarding]);
-
-  const handleMapReady = (map: google.maps.Map) => {
-    mapInstanceRef.current = map;
-    if (mapReady.current || !window.google) return;
-    
-    // 온보딩 완료 후에만 마커 표시
-    if (showOnboarding) {
-      console.info("Map markers skipped: onboarding in progress");
-      return;
-    }
-    
-    mapReady.current = true;
-
-    map.setOptions({
-      disableDefaultUI: false,
-      mapTypeControl: false,
-      streetViewControl: false,
-      fullscreenControl: false,
-      zoomControl: true,
-      styles: [
-        { elementType: "geometry", stylers: [{ color: "#f6ecd8" }] },
-        { elementType: "labels.text.fill", stylers: [{ color: "#17324d" }] },
-        { elementType: "labels.text.stroke", stylers: [{ color: "#fff7e7" }] },
-        { featureType: "road", elementType: "geometry", stylers: [{ color: "#f0cfaa" }] },
-        { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#17324d" }, { weight: 1.2 }] },
-        { featureType: "water", elementType: "geometry", stylers: [{ color: "#b8d6d2" }] },
-        { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#cbe6ce" }] },
-      ],
-    });
-
-    // 안전 구역 표시 (모든 안전 구역을 원형으로 표시)
-    if (safeZones && safeZones.length > 0) {
-      // InfoWindow 인스턴스 (한 번에 하나만 열기 위해 공유)
-      let activeInfoWindow: google.maps.InfoWindow | null = null;
-      
-      safeZones.forEach((zone: any) => {
-        const isActive = geofenceAlertsEnabled;
-        const circleColor = isActive ? "#1d8664" : "#999999";
-        const fillColor = isActive ? "#8fd3b6" : "#cccccc";
-        
-        // 안전 구역 원형 생성
-        const circle = new window.google.maps.Circle({
-          strokeColor: circleColor,
-          strokeOpacity: 0.8,
-          strokeWeight: 3,
-          fillColor: fillColor,
-          fillOpacity: 0.15,
-          map,
-          center: { lat: zone.centerLatitude, lng: zone.centerLongitude },
-          radius: zone.radiusMeters,
-        });
-        
-        // 원형 클릭 이벤트 리스너 추가
-        circle.addListener("click", () => {
-          // 기존 InfoWindow 닫기
-          if (activeInfoWindow) {
-            activeInfoWindow.close();
-          }
-          
-          // 새 InfoWindow 생성
-          const infoWindowContent = `
-            <div style="padding: 8px; font-family: sans-serif; font-size: 13px;">
-              <div style="font-weight: bold; font-size: 14px; margin-bottom: 6px; color: #17324d;">${zone.name}</div>
-              <div style="color: #51677a; margin-bottom: 4px;">
-                <strong>반경:</strong> ${zone.radiusMeters}m
-              </div>
-              <div style="color: #51677a; font-size: 12px;">
-                <strong>위치:</strong> ${zone.centerLatitude.toFixed(4)}°, ${zone.centerLongitude.toFixed(4)}°
-              </div>
-            </div>
-          `;
-          
-          activeInfoWindow = new window.google.maps.InfoWindow({
-            content: infoWindowContent,
-            position: { lat: zone.centerLatitude, lng: zone.centerLongitude },
-          });
-          
-          activeInfoWindow.open(map);
-        });
-        
-        // 마우스 오버 시 커서 변경
-        circle.addListener("mouseover", () => {
-          map.setOptions({ draggableCursor: "pointer" });
-        });
-        
-        circle.addListener("mouseout", () => {
-          map.setOptions({ draggableCursor: "grab" });
-        });
-        
-        // 안전 구역 이름 라벨 추가
-        const labelPin = document.createElement("div");
-        labelPin.style.cssText = `
-          background-color: rgba(255, 255, 255, 0.9);
-          border: 2px solid ${circleColor};
-          border-radius: 4px;
-          padding: 4px 8px;
-          font-size: 12px;
-          font-weight: bold;
-          color: ${circleColor};
-          white-space: nowrap;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-          cursor: pointer;
-        `;
-        labelPin.innerHTML = zone.name;
-        
-        new window.google.maps.marker.AdvancedMarkerElement({
-          map,
-          position: { lat: zone.centerLatitude, lng: zone.centerLongitude },
-          content: labelPin,
-        });
-      });
-    }
-    
-    // 실제 저장된 위치 데이터를 지도에 표시
-    if (storedLocationsWithCoordinates.length > 0) {
-      const bounds = new window.google.maps.LatLngBounds();
-      
-      storedLocationsWithCoordinates.forEach((location) => {
-        if (location.location) {
-          const position = { lat: location.location.latitude, lng: location.location.longitude };
-          bounds.extend(position);
-          
-          // 사용자 마커 표시 (파란 깃발 모양)
-          const pin = document.createElement("div");
-          pin.className = "map-pin-marker";
-          pin.style.cssText = `
-            width: 40px;
-            height: 40px;
-            background-color: #2563eb;
-            border: 3px solid #1e40af;
-            border-radius: 50% 50% 50% 0;
-            transform: rotate(-45deg);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            font-size: 14px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.4);
-          `;
-          pin.innerHTML = `<span style="transform: rotate(45deg); display: block;">${location.displayName?.charAt(0) || "📍"}</span>`;
-          
-          new window.google.maps.marker.AdvancedMarkerElement({
-            map,
-            position,
-            title: `${location.displayName} · 마지막 위치: ${new Date(location.location.recordedAt).toLocaleTimeString()}`,
-            content: pin,
-          });
-        }
-      });
-      
-      // 모든 마커가 보이도록 지도 확대/축소
-      if (storedLocationsWithCoordinates.length === 1) {
-        map.setCenter({
-          lat: storedLocationsWithCoordinates[0].location!.latitude,
-          lng: storedLocationsWithCoordinates[0].location!.longitude,
-        });
-        map.setZoom(15);
-      } else {
-        map.fitBounds(bounds, 50);
-      }
-    } else {
-      // 위치 데이터가 없을 때 기본 중심좌표 설정 (서울 시내)
-      const defaultCenter = { lat: 37.5665, lng: 126.9780 };
-      map.setCenter(defaultCenter);
-      map.setZoom(13);
-    }
-  };
-
-  const showDemoToast = (message = "데모 웹사이트에서는 실제 위치 공유가 연결되어 있지 않습니다.") => {
-    toast(message, {
-      description: "실서비스에서는 보호자 초대, 권한 승인, 실시간 위치 동의 절차가 필요합니다.",
-    });
-  };
-
-  const saveGrantedLocation = async (position: GeolocationPosition) => {
-    if (!isAuthenticated) {
-      toast("로그인이 먼저 필요합니다.", {
-        description: "위치 동의 기록과 가족 위치 저장은 로그인한 사용자에게만 연결됩니다.",
-      });
-      openOnboarding(0);
-      return;
-    }
-
-    const consentResult = await grantConsentMutation.mutateAsync({
-      displayName: guardianName || user?.name || "보호자",
-      familyRole: apiFamilyRole,
-      permissionState: "granted",
-      consentText: "PinKids에서 가족 구성원이 최신 위치를 확인할 수 있도록 브라우저 위치 정보 제공에 동의합니다.",
-    });
-
-    await updateLocationMutation.mutateAsync({
-      familyId: consentResult.family?.id,
-      latitude: position.coords.latitude,
-      longitude: position.coords.longitude,
-      accuracy: position.coords.accuracy ?? null,
-      recordedAt: position.timestamp || Date.now(),
-    });
-  };
-
-  const refreshCurrentLocation = async () => {
-    if (!navigator.geolocation) {
-      toast("위치 권한을 사용할 수 없습니다.", {
-        description: "현재 브라우저에서는 위치 업데이트를 저장할 수 없습니다.",
-      });
-      return;
-    }
-
-    if (!hasActiveStoredConsent) {
-      toast("먼저 위치 정보 제공에 동의해주세요.", {
-        description: "온보딩의 위치 동의 단계에서 동의를 저장한 뒤 현재 위치를 업데이트할 수 있습니다.",
-      });
-      openOnboarding(2);
-      return;
-    }
-
-    setLocationPermission("requesting");
-    navigator.geolocation.getCurrentPosition(
-      position => {
-        void (async () => {
-          try {
-            await updateLocationMutation.mutateAsync({
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              accuracy: position.coords.accuracy ?? null,
-              recordedAt: position.timestamp || Date.now(),
-            });
-            setLocationPermission("granted");
-            toast("현재 위치가 업데이트되었습니다.", {
-              description: "가족 위치 화면에 저장된 최신 좌표를 반영했습니다.",
-            });
-          } catch {
-            setLocationPermission("denied");
-            toast("현재 위치 저장에 실패했습니다.", {
-              description: "잠시 후 다시 시도해주세요.",
-            });
-          }
-        })();
-      },
-      () => {
-        setLocationPermission("denied");
-        toast("위치 업데이트가 허용되지 않았습니다.", {
-          description: "브라우저 위치 권한을 허용한 뒤 다시 시도해주세요.",
-        });
-      },
-      LOCATION_PERMISSION_REQUEST_OPTIONS,
-    );
-  };
-
-  const revokeStoredConsent = async () => {
-    await revokeConsentMutation.mutateAsync();
-    setLocationPermission("idle");
-    toast("위치 정보 제공 동의가 철회되었습니다.", {
-      description: "저장된 최신 위치 표시는 비활성화되며, 다시 공유하려면 위치 동의를 새로 진행해야 합니다.",
-    });
-  };
-
-  const pauseStoredLocationSharing = async () => {
-    await pauseSharingMutation.mutateAsync();
-    setLocationPermission("idle");
-    toast("위치 공유가 일시 중지되었습니다.", {
-      description: "동의 기록은 보관하지만, 가족 위치 목록에서는 최신 위치가 더 이상 노출되지 않습니다.",
-    });
-  };
-
-  const deleteStoredLocationHistory = async () => {
-    await deleteHistoryMutation.mutateAsync();
-    setLocationPermission("idle");
-    toast("저장된 위치 기록이 삭제되었습니다.", {
-      description: "보관 기간 안내에 따라 현재 계정의 위치 포인트와 활성 동의가 정리되었습니다.",
-    });
-  };
-
-  const useCurrentMapCenterForSafeZone = () => {
-    const center = mapInstanceRef.current?.getCenter();
-    if (!center) {
-      toast("지도 중심을 아직 확인할 수 없습니다.", {
-        description: "지도가 로드된 뒤 다시 시도해주세요.",
-      });
-      return;
-    }
-    setSafeZoneCenter({ lat: center.lat(), lng: center.lng() });
-    toast("지도 중심 좌표를 안전 구역 중심으로 선택했습니다.", {
-      description: `${center.lat().toFixed(5)}, ${center.lng().toFixed(5)}`,
-    });
-  };
-
-  const handleMapClickForZoneSelection = (event: google.maps.MapMouseEvent) => {
-    if (!isSelectingZoneLocation || !event.latLng) return;
-    
-    const lat = event.latLng.lat();
-    const lng = event.latLng.lng();
-    
-    // 기존 마커와 InfoWindow 제거
-    if (selectedZoneMarker) {
-      selectedZoneMarker.map = null;
-    }
-    if (selectedZoneInfoWindowRef.current) {
-      selectedZoneInfoWindowRef.current.close();
-    }
-    
-    // 새 마커 생성
-    const pin = document.createElement("div");
-    pin.style.cssText = `
-      width: 40px;
-      height: 40px;
-      background-color: #f2a37b;
-      border: 3px solid #17324d;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-weight: bold;
-      font-size: 20px;
-      box-shadow: 0 3px 10px rgba(0,0,0,0.4);
-    `;
-    pin.innerHTML = "📍";
-    
-    const marker = new window.google.maps.marker.AdvancedMarkerElement({
-      map: mapInstanceRef.current,
-      position: { lat, lng },
-      content: pin,
-      title: "선택된 안전 구역 위치",
-    });
-    
-    // InfoWindow 생성 및 표시
-    const infoWindow = new window.google.maps.InfoWindow({
-      content: `
-        <div style="padding: 10px; font-family: Arial, sans-serif;">
-          <div style="font-weight: bold; color: #17324d; margin-bottom: 5px;">${safeZoneName || '안전 구역'}</div>
-          <div style="font-size: 12px; color: #51677a;">${lat.toFixed(5)}, ${lng.toFixed(5)}</div>
-        </div>
-      `,
-    });
-    
-    infoWindow.open(mapInstanceRef.current, marker);
-    
-    setSelectedZoneMarker(marker);
-    selectedZoneInfoWindowRef.current = infoWindow;
-    setSafeZoneCenter({ lat, lng });
-    
-    toast("안전 구역 위치가 선택되었습니다.", {
-      description: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-    });
-  };
-
-  const createSafeZone = async () => {
-    if (!primaryFamilyId) {
-      toast("보호자 가족 그룹이 필요합니다.", {
-        description: "위치 동의를 완료하거나 보호자 권한으로 가족 그룹에 참여한 뒤 안전 구역을 만들 수 있습니다.",
-      });
-      return;
-    }
-
-    await createSafeZoneMutation.mutateAsync({
-      familyId: primaryFamilyId,
-      name: safeZoneName.trim() || "안전 구역",
-      centerLatitude: safeZoneCenter.lat,
-      centerLongitude: safeZoneCenter.lng,
-      radiusMeters: safeZoneRadius,
-      alertsEnabled: true,
-    });
-  };
-
-  const toggleGeofenceAlerts = async () => {
-    if (!primaryFamilyId) return;
-    const nextEnabled = !geofenceAlertsEnabled;
-    await setAlertSettingMutation.mutateAsync({ familyId: primaryFamilyId, geofenceAlertsEnabled: nextEnabled });
-    toast(nextEnabled ? "위치 이탈 알림을 켰습니다." : "위치 이탈 알림을 껐습니다.", {
-      description: nextEnabled ? "안전 구역 진입·이탈 이벤트가 다시 기록됩니다." : "내 알림 설정이 꺼진 동안에는 이탈 알림 수신 대상에서 제외됩니다.",
-    });
-  };
-
-  const acknowledgeLocationAlert = async (alertId: number) => {
-    await acknowledgeAlertMutation.mutateAsync({ alertId });
-    toast("알림을 확인 처리했습니다.", {
-      description: "최근 이탈 기록 목록에 확인 시각이 반영됩니다.",
-    });
-  };
-
-  const createFamilyInviteUrl = async () => {
-    if (!isAuthenticated) {
-      toast("로그인이 먼저 필요합니다.", {
-        description: "보호자 계정으로 로그인한 뒤 가족 초대 링크를 만들 수 있습니다.",
-      });
-      openOnboarding(0);
-      return;
-    }
-
-    if (!primaryGuardianMembership) {
-      toast("초대 가능한 가족 그룹이 없습니다.", {
-        description: "보호자 권한이 있는 가족 그룹을 먼저 생성하거나 위치 동의를 완료해주세요.",
-      });
-      openOnboarding(1);
-      return;
-    }
-
-    await createInviteLinkMutation.mutateAsync({
-      familyId: primaryGuardianMembership.familyId,
-      role: inviteRole,
-      canViewLocation: inviteRole === "guardian",
-      canShareLocation: true,
-      expiresInHours: 24,
-    });
-  };
-
-  const copyInviteUrl = async () => {
-    if (!createdInviteUrl) return;
-    await navigator.clipboard.writeText(createdInviteUrl);
-    toast("초대 링크를 복사했습니다.", {
-      description: "카카오톡, 문자, 이메일 등에 붙여넣어 가족에게 전달할 수 있습니다.",
-    });
-  };
-
-  const shareInviteUrl = async () => {
-    if (!createdInviteUrl) return;
-    if (navigator.share) {
-      await navigator.share({
-        title: "아이안심 가족 초대",
-        text: "아이안심 가족 위치 공유 공간에 참여해주세요.",
-        url: createdInviteUrl,
-      });
-      return;
-    }
-    await copyInviteUrl();
-  };
-
-  const revokeInviteUrl = async (linkId: number) => {
-    await revokeInviteLinkMutation.mutateAsync({ linkId });
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!createdInviteUrl) {
-      setInviteQrCodeUrl("");
-      return;
-    }
-
-    QRCode.toDataURL(createdInviteUrl, {
-      width: 220,
-      margin: 2,
-      color: {
-        dark: "#17324d",
-        light: "#fff7e7",
-      },
-    }).then(url => {
-      if (!cancelled) setInviteQrCodeUrl(url);
-    }).catch(() => {
-      if (!cancelled) setInviteQrCodeUrl("");
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [createdInviteUrl]);
-
-  useEffect(() => {
-    if (!mapInstanceRef.current || !window.google) return;
-    familyMarkerRefs.current.forEach(marker => {
-      marker.map = null;
-    });
-    familyMarkerRefs.current = [];
-
-    if (familyPathRef.current) {
-      familyPathRef.current.setMap(null);
-      familyPathRef.current = null;
-    }
-
-    const bounds = new window.google.maps.LatLngBounds();
-    const path: google.maps.LatLngLiteral[] = [];
-
-    storedFamilyLocations.forEach(item => {
-      if (!item.location) return;
-      const position = { lat: item.location.latitude, lng: item.location.longitude };
-      const pin = document.createElement("div");
-      pin.className = "map-pin-marker";
-      pin.innerHTML = `<span>${item.displayName.slice(0, 2)}</span>`;
-      const marker = new window.google!.maps.marker.AdvancedMarkerElement({
-        map: mapInstanceRef.current,
-        position,
-        title: `${item.displayName} · 저장된 최신 위치`,
-        content: pin,
-      });
-
-      // 마커 클릭 시 InfoWindow 표시
-      const infoWindow = new window.google.maps.InfoWindow({
-        content: `
-          <div style="padding: 12px; font-family: sans-serif; color: #17324d;">
-            <div style="font-weight: bold; font-size: 14px; margin-bottom: 6px; color: #17324d;">${item.displayName}</div>
-            <div style="font-size: 12px; color: #51677a; margin-bottom: 4px;">
-              <strong>위치:</strong> ${item.location.latitude.toFixed(4)}, ${item.location.longitude.toFixed(4)}
-            </div>
-            <div style="font-size: 12px; color: #51677a;">
-              <strong>마지막 업데이트:</strong> ${new Date(item.location.recordedAt).toLocaleString('ko-KR')}
-            </div>
-          </div>
-        `,
-      });
-
-      pin.addEventListener('click', () => {
-        infoWindow.open(mapInstanceRef.current, marker);
-      });
-      familyMarkerRefs.current.push(marker);
-      bounds.extend(position);
-      path.push(position);
-    });
-
-    // Polyline 제거 - 불필요한 이동선
-
-    if (path.length > 0) {
-      mapInstanceRef.current.fitBounds(bounds, 72);
-    }
-  }, [storedFamilyLocations]);
-
-  useEffect(() => {
-    if (!mapInstanceRef.current || !window.google) return;
-
-    safeZoneCircleRefs.current.forEach(circle => circle.setMap(null));
-    safeZoneCircleRefs.current = [];
-
-    safeZones
-      .filter(zone => zone.isActive)
-      .forEach(zone => {
-        const circle = new window.google.maps.Circle({
-          strokeColor: zone.alertsEnabled ? "#8fd3b6" : "#f2a37b",
-          strokeOpacity: 0.95,
-          strokeWeight: 3,
-          fillColor: zone.alertsEnabled ? "#8fd3b6" : "#f2a37b",
-          fillOpacity: 0.18,
-          map: mapInstanceRef.current,
-          center: { lat: zone.centerLatitude, lng: zone.centerLongitude },
-          radius: zone.radiusMeters,
-        });
-        safeZoneCircleRefs.current.push(circle);
-      });
-  }, [safeZones]);
-
-  const openOnboarding = (step = 0) => {
-    setOnboardingStep(step);
-    setShowOnboarding(true);
-  };
-
-  const goNextStep = () => {
-    setOnboardingStep(step => Math.min(step + 1, onboardingSteps.length - 1));
-  };
-
-  const startSocialLogin = (provider: SocialLoginProvider) => {
-    try {
-      window.localStorage.setItem("child-location-preferred-login-provider", provider);
-    } catch {
-      // 저장소가 제한된 환경에서도 인증 이동은 계속 진행한다.
-    }
-
-    window.location.href = buildSocialLoginUrl(getLoginUrl(), provider);
-  };
-
-  const completeOnboarding = () => {
-    try {
-      window.localStorage.setItem("child-location-onboarding-complete", "true");
-    } catch {
-      // 데모 환경에서 저장소 접근이 제한되어도 화면 흐름은 계속 진행한다.
-    }
-    setShowOnboarding(false);
-    toast("온보딩이 완료되었습니다.", {
-      description: `${guardianName || "보호자"}님, 이제 위치 보기 섹션에서 가족 상태를 확인할 수 있습니다.`,
-    });
-    window.setTimeout(() => document.getElementById("map")?.scrollIntoView({ behavior: "smooth" }), 150);
-  };
-
-  const checkLocationPermissionAgain = async () => {
-    if (!navigator.geolocation) {
-      setLocationPermission("unsupported");
-      setLocationPermissionMessage("이 브라우저에서는 위치 권한 요청을 사용할 수 없습니다. 위치 없이 데모를 계속할 수 있습니다.");
-      return;
-    }
-
-    try {
-      setLocationPermission("checking");
-      setLocationPermissionMessage("브라우저 권한 상태를 확인하고 있습니다...");
-      
-      const browserState = await queryGeolocationPermission();
-      const nextState = mapBrowserPermissionState(browserState);
-
-      setLocationPermission(nextState);
-      setShowLocationSettingsGuide(browserState === "denied");
-      setLocationPermissionMessage(
-        browserState === "denied"
-          ? "아직 브라우저에서 위치 권한이 차단되어 있습니다. 설정을 허용으로 바꾼 뒤 다시 확인해주세요."
-          : browserState === "granted"
-            ? "위치 권한이 허용된 상태입니다. 다음 단계로 계속할 수 있습니다."
-            : "권한 요청이 가능한 상태입니다. 아래 버튼으로 브라우저 권한 창을 열 수 있습니다.",
-      );
-    } catch (error) {
-      console.error("권한 확인 중 오류:", error);
-      setLocationPermission("denied");
-      setLocationPermissionMessage("권한 상태를 확인할 수 없습니다. 잠시 후 다시 시도해주세요.");
-    }
-  };
-
-  const requestLocationConsent = async () => {
-    if (!navigator.geolocation) {
-      setLocationPermission("unsupported");
-      setLocationPermissionMessage("이 브라우저에서는 위치 권한 요청을 사용할 수 없습니다. 위치 없이 데모를 계속할 수 있습니다.");
-      toast("위치 권한 요청을 사용할 수 없습니다.", {
-        description: "가족 그룹 생성과 데모 탐색은 계속할 수 있습니다.",
-      });
-      return;
-    }
-
-    try {
-      setLocationPermission("requesting");
-      setLocationPermissionMessage("브라우저 권한 상태를 확인하고 있습니다...");
-      setShowLocationSettingsGuide(false);
-
-      const browserState = await queryGeolocationPermission();
-      if (browserState === "denied") {
-        setLocationPermission("blocked");
-        setShowLocationSettingsGuide(true);
-        setLocationPermissionMessage("브라우저가 이미 위치 권한을 차단했습니다. 설정 안내를 확인한 뒤 권한 다시 확인을 누르르주세요.");
-        toast("브라우저 설정 변경이 아른 가능성 있습니다.", {
-          description: "주소창 또는 브라우저 설정에서 PinKids 위치 권한을 허용해주세요.",
-        });
-        return;
-      }
-
-      setLocationPermissionMessage("브라우저 권한 창이 열리면 '허용'을 선택해주세요.");
-
-      return new Promise<void>((resolve) => {
-        const timeout = setTimeout(() => {
-          setLocationPermission("denied");
-          setLocationPermissionMessage("권한 요청 시간이 초과되었습니다. 다시 시도해주세요.");
-          toast("권한 요청 시간 초과", {
-            description: "브라우저 권한 창이 나타나지 않았습니다. 다시 시도해주세요.",
-          });
-          resolve();
-        }, 30000); // 30초 타임아웃
-
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            clearTimeout(timeout);
-            void (async () => {
-              try {
-                await saveGrantedLocation(position);
-                setLocationPermission("granted");
-                setLocationPermissionMessage("위치 권한과 서비스 동의가 저장되었습니다. 다음 단계로 계속할 수 있습니다.");
-                toast("위치 동의와 현재 위치가 저장되었습니다.", {
-                  description: "총회 버튼으로 언제든 위치 공유를 중단할 수 있습니다.",
-                });
-              } catch (error) {
-                console.error("위치 저장 실패:", error);
-                setLocationPermission("denied");
-                setLocationPermissionMessage("브라우저 권한은 허용되었지만 서비스 동의 저장에 실패했습니다. 잠시 후 다시 시도해주세요.");
-                toast("위치 동의 저장에 실패했습니다.", {
-                  description: "네트워크 상태를 확인한 뒤 다시 시도해주세요.",
-                });
-              }
-              resolve();
-            })();
-          },
-          (error) => {
-            clearTimeout(timeout);
-            console.error("위치 권한 거부:", error);
-            setLocationPermission("denied");
-            setLocationPermissionMessage("권한을 허용하지 않아도 데모 탐색은 계속할 수 있습니다. 아래 버튼으로 다시 시도할 수 있습니다.");
-            toast("위치 권한이 허용되지 않았습니다.", {
-              description: "실시간 위치 알림은 나중에 권한을 허용한 뒤 사용할 수 있습니다.",
-            });
-            resolve();
-          },
-          LOCATION_PERMISSION_REQUEST_OPTIONS,
-        );
-      });
-    } catch (error) {
-      console.error("위치 권한 요청 중 오류:", error);
-      setLocationPermission("denied");
-      setLocationPermissionMessage("위치 권한 요청 중 오류가 발생했습니다. 다시 시도해주세요.");
-      toast("오류 발생", {
-        description: "위치 권한 요청 중 오류가 발생했습니다. 다시 시도해주세요.",
-      });
-    }
-  };
+  const { isAuthenticated } = useAuth();
+  const { openOnboarding } = useOnboardingModal();
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[#fff7e7] text-[#17324d] paper-grain">
-      <header className="sticky top-0 z-50 border-b-[3px] border-[#17324d] bg-[#fff7e7]/92 backdrop-blur-xl">
-        <nav className="container flex h-20 items-center justify-between gap-6">
-          <a href="#top" className="group flex items-center gap-3" aria-label="핀키즈 홈">
-            <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663647991675/fuW72okeNRT65TWogzSyTX/pinkids_logo-bLUfJu9Gwp7PMy3dAmMaey.webp" alt="Pinkids" className="h-11 w-11 transition-transform group-hover:scale-110" />
-            <span className="font-display text-2xl tracking-tight">핀키즈</span>
-          </a>
-          <div className="hidden items-center gap-8 text-sm font-bold md:flex">
-            <a href="#features" className="hover:underline hover:decoration-[3px] hover:underline-offset-8">기능</a>
-            <a href="#map" className="hover:underline hover:decoration-[3px] hover:underline-offset-8">위치 보기</a>
-            <a href="#how" className="hover:underline hover:decoration-[3px] hover:underline-offset-8">사용 방법</a>
-          </div>
-          {isAuthenticated ? (
-            <div className="hidden items-center gap-3 md:flex">
-              <span className="border-[3px] border-[#17324d] bg-[#8fd3b6] px-4 py-2 text-sm font-black shadow-[4px_4px_0_#17324d]">
-                {user?.name || "보호자"}님 로그인 중
-              </span>
-              <Button
-                onClick={() => logout()}
-                variant="outline"
-                className="border-[3px] border-[#17324d] bg-[#fff7e7] px-4 py-5 font-black shadow-[4px_4px_0_#f2a37b] hover:bg-white"
-              >
-                <LogOut className="mr-2 h-4 w-4" /> 로그아웃
-              </Button>
+    <AppLayout>
+      {/* Hero */}
+      <section className="relative border-b-[3px] border-[#17324d]">
+        <div className="absolute -left-16 top-24 h-56 w-56 rounded-full bg-[#f2a37b]/40 blur-3xl" />
+        <div className="absolute right-8 top-32 h-72 w-72 rounded-full bg-[#8fd3b6]/45 blur-3xl" />
+        <div className="container grid min-h-[calc(100vh-80px)] items-center gap-12 py-16 lg:grid-cols-[0.92fr_1.08fr] lg:py-20">
+          <div className="relative z-10 max-w-2xl">
+            <div className="mb-8 inline-flex rotate-[-1deg] items-center gap-2 border-[3px] border-[#17324d] bg-[#f8d9a8] px-4 py-2 text-sm font-black shadow-[4px_4px_0_#17324d]">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#1d8664] pulse-dot" />
+              가족 위치 공유 데모 서비스
             </div>
-          ) : (
-            <Button
-              onClick={() => openOnboarding(0)}
-              className="border-[3px] border-[#17324d] bg-[#17324d] px-5 py-5 text-[#fff7e7] shadow-[5px_5px_0_#f2a37b] hover:bg-[#254462]"
-            >
-              소셜 로그인으로 시작
-            </Button>
-          )}
-        </nav>
-      </header>
-
-      <main id="top">
-        <section className="relative border-b-[3px] border-[#17324d]">
-          <div className="absolute -left-16 top-24 h-56 w-56 rounded-full bg-[#f2a37b]/40 blur-3xl" />
-          <div className="absolute right-8 top-32 h-72 w-72 rounded-full bg-[#8fd3b6]/45 blur-3xl" />
-          <div className="container grid min-h-[calc(100vh-80px)] items-center gap-12 py-16 lg:grid-cols-[0.92fr_1.08fr] lg:py-20">
-            <div className="relative z-10 max-w-2xl">
-              <div className="mb-8 inline-flex rotate-[-1deg] items-center gap-2 border-[3px] border-[#17324d] bg-[#f8d9a8] px-4 py-2 text-sm font-black shadow-[4px_4px_0_#17324d]">
-                <span className="h-2.5 w-2.5 rounded-full bg-[#1d8664] pulse-dot" />
-                가족 위치 공유 데모 서비스
-              </div>
-              <h1 className="font-display text-5xl leading-[1.02] tracking-[-0.04em] sm:text-6xl lg:text-7xl">
-                아이의 위치를
-                <span className="block text-[#1d8664]">쉽고 빠르게</span>
-                확인하세요.
-              </h1>
-              <p className="mt-7 max-w-xl text-lg font-medium leading-8 text-[#314b62]">
-                학교, 학원, 집처럼 중요한 장소를 한눈에 보고 아이가 안전 반경 안에 있는지 확인하는 간단한 위치 공유 웹사이트입니다. 복잡한 기능보다 <strong className="font-black text-[#17324d]">빠른 확인, 쉬운 초대, 안심 알림</strong>에 집중했습니다.
-              </p>
-              <div className="mt-9 flex flex-col gap-4 sm:flex-row">
+            <h1 className="font-display text-5xl leading-[1.02] tracking-[-0.04em] sm:text-6xl lg:text-7xl">
+              아이의 위치를
+              <span className="block text-[#1d8664]">쉽고 빠르게</span>
+              확인하세요.
+            </h1>
+            <p className="mt-7 max-w-xl text-lg font-medium leading-8 text-[#314b62]">
+              학교, 학원, 집처럼 중요한 장소를 한눈에 보고 아이가 안전 반경 안에 있는지 확인하는 간단한 위치 공유 웹사이트입니다. 복잡한 기능보다 <strong className="font-black text-[#17324d]">빠른 확인, 쉬운 초대, 안심 알림</strong>에 집중했습니다.
+            </p>
+            <div className="mt-9 flex flex-col gap-4 sm:flex-row">
+              {isAuthenticated ? (
+                <Link href="/map">
+                  <Button className="h-14 border-[3px] border-[#17324d] bg-[#8fd3b6] px-7 text-base font-black text-[#17324d] shadow-[6px_6px_0_#17324d] transition-all hover:translate-x-1 hover:translate-y-1 hover:bg-[#9ee4c6] hover:shadow-[3px_3px_0_#17324d]">
+                    위치 보기 화면으로 <ChevronRight className="ml-2 h-5 w-5" />
+                  </Button>
+                </Link>
+              ) : (
                 <Button
                   onClick={() => openOnboarding(0)}
                   className="h-14 border-[3px] border-[#17324d] bg-[#8fd3b6] px-7 text-base font-black text-[#17324d] shadow-[6px_6px_0_#17324d] transition-all hover:translate-x-1 hover:translate-y-1 hover:bg-[#9ee4c6] hover:shadow-[3px_3px_0_#17324d]"
                 >
                   지금 위치 확인하기
                 </Button>
+              )}
+              <Link href="/map">
                 <Button
-                  onClick={() => document.getElementById("map")?.scrollIntoView({ behavior: "smooth" })}
                   variant="outline"
                   className="h-14 border-[3px] border-[#17324d] bg-[#fff7e7] px-7 text-base font-black shadow-[6px_6px_0_#f2a37b] transition-all hover:translate-x-1 hover:translate-y-1 hover:bg-[#ffe8cd] hover:shadow-[3px_3px_0_#f2a37b]"
                 >
                   데모 지도 보기
                 </Button>
-              </div>
-              <div className="mt-10 grid grid-cols-3 gap-3 max-w-lg">
-                {[
-                  ["3초", "최근 위치 확인"],
-                  ["5곳", "안전 구역"],
-                  ["1번", "체크인 버튼"],
-                ].map(([value, label]) => (
-                  <div key={label} className="border-[3px] border-[#17324d] bg-white/60 p-4 shadow-[4px_4px_0_#17324d]">
-                    <div className="font-display text-2xl">{value}</div>
-                    <div className="mt-1 text-xs font-bold text-[#51677a]">{label}</div>
-                  </div>
-                ))}
-              </div>
+              </Link>
             </div>
-
-            <div className="relative z-10">
-              <div className="absolute -left-5 -top-5 z-20 hidden rotate-[-6deg] border-[3px] border-[#17324d] bg-[#f2a37b] px-5 py-3 font-black shadow-[5px_5px_0_#17324d] md:block">
-                안전 반경 안
-              </div>
-              <div className="relative overflow-hidden border-[4px] border-[#17324d] bg-[#fffdf5] shadow-[12px_12px_0_#17324d]">
-                <img src={HERO_IMAGE} alt="자녀 위치 공유 대시보드 일러스트" className="h-full w-full object-cover" />
-              </div>
-              <div className="absolute -bottom-8 right-3 z-20 w-[78%] border-[3px] border-[#17324d] bg-[#fff7e7] p-4 shadow-[7px_7px_0_#f2a37b] sm:w-[440px]">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-[#17324d] bg-[#8fd3b6]"><MapPin className="h-6 w-6" /></span>
-                    <div>
-                      <p className="text-sm font-black">지우가 학교 반경 안에 있어요</p>
-                      <p className="text-xs font-bold text-[#5b6f80]">마지막 업데이트: 방금 전</p>
-                    </div>
-                  </div>
-                  <BellRing className="h-6 w-6 text-[#d96d45]" />
+            <div className="mt-10 grid grid-cols-3 gap-3 max-w-lg">
+              {[
+                ["3초", "최근 위치 확인"],
+                ["5곳", "안전 구역"],
+                ["1번", "체크인 버튼"],
+              ].map(([value, label]) => (
+                <div key={label} className="border-[3px] border-[#17324d] bg-white/60 p-4 shadow-[4px_4px_0_#17324d]">
+                  <div className="font-display text-2xl">{value}</div>
+                  <div className="mt-1 text-xs font-bold text-[#51677a]">{label}</div>
                 </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="features" className="container py-24">
-          <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
-            <div>
-              <p className="mb-4 inline-block border-[3px] border-[#17324d] bg-[#8fd3b6] px-4 py-2 text-sm font-black shadow-[4px_4px_0_#17324d]">핵심 기능</p>
-              <h2 className="font-display text-4xl leading-tight tracking-[-0.03em] sm:text-5xl">부모가 실제로 자주 확인하는 것만 담았습니다.</h2>
-            </div>
-            <div className="grid gap-5 md:grid-cols-3">
-              {features.map(feature => (
-                <Card key={feature.title} className="group border-[3px] border-[#17324d] bg-[#fffdf5] shadow-[7px_7px_0_#17324d] transition-all hover:-translate-y-1 hover:shadow-[9px_9px_0_#17324d]">
-                  <CardContent className="p-6">
-                    <feature.icon className="mb-5 h-9 w-9 text-[#1d8664]" />
-                    <h3 className="text-xl font-black">{feature.title}</h3>
-                    <p className="mt-3 text-sm font-medium leading-6 text-[#51677a]">{feature.text}</p>
-                  </CardContent>
-                </Card>
               ))}
             </div>
           </div>
-        </section>
 
-        <section id="map" className="border-y-[3px] border-[#17324d] bg-[#17324d] py-12 sm:py-16 lg:py-20 text-[#fff7e7]">
-          <div className="container grid gap-6 sm:gap-8 lg:gap-10 grid-cols-1 lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="overflow-hidden border-[4px] border-[#fff7e7] bg-[#fff7e7] shadow-[12px_12px_0_#f2a37b] w-full h-[300px] sm:h-[500px] lg:h-[700px]">
-              <MapView initialCenter={{ lat: 37.5668, lng: 126.9786 }} initialZoom={15} onMapReady={handleMapReady} onClick={handleMapClickForZoneSelection} className="w-full h-full" />
+          <div className="relative z-10">
+            <div className="absolute -left-5 -top-5 z-20 hidden rotate-[-6deg] border-[3px] border-[#17324d] bg-[#f2a37b] px-5 py-3 font-black shadow-[5px_5px_0_#17324d] md:block">
+              안전 반경 안
             </div>
-            <div className="flex flex-col justify-center">
-              <p className="mb-4 inline-flex w-fit items-center gap-2 border-[3px] border-[#fff7e7] bg-[#f2a37b] px-4 py-2 text-sm font-black text-[#17324d] shadow-[4px_4px_0_#fff7e7]"><Radar className="h-4 w-4" /> 실시간 위치 화면</p>
-              <h2 className="font-display text-4xl leading-tight tracking-[-0.03em] sm:text-5xl">지도 위에 안전 구역과 이동 경로를 함께 표시합니다.</h2>
-              <p className="mt-6 text-base font-medium leading-8 text-[#d9e5df]">로그인한 사용자가 위치 정보 제공에 동의하면 서버에 동의 내역과 최신 좌표가 저장되고, 같은 가족 그룹의 구성원 위치가 이 목록에 표시됩니다.</p>
-              <div className="mt-6 border-[3px] border-[#fff7e7] bg-[#fff7e7] p-4 text-[#17324d] shadow-[5px_5px_0_#8fd3b6]">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative overflow-hidden border-[4px] border-[#17324d] bg-[#fffdf5] shadow-[12px_12px_0_#17324d]">
+              <img src={HERO_IMAGE} alt="자녀 위치 공유 대시보드 일러스트" className="h-full w-full object-cover" />
+            </div>
+            <div className="absolute -bottom-8 right-3 z-20 w-[78%] border-[3px] border-[#17324d] bg-[#fff7e7] p-4 shadow-[7px_7px_0_#f2a37b] sm:w-[440px]">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-[#17324d] bg-[#8fd3b6]"><MapPin className="h-6 w-6" /></span>
                   <div>
-                    <p className="text-sm font-black">저장된 위치 동의 상태</p>
-                    <p className="mt-1 text-xs font-bold text-[#51677a]">
-                      {isAuthenticated ? (hasActiveStoredConsent ? "동의 활성화 · 가족 위치 저장 가능" : "동의 없음 · 위치 저장 전") : "로그인 후 동의 상태를 확인할 수 있습니다."}
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <Button
-                      onClick={() => void refreshCurrentLocation()}
-                      disabled={!isAuthenticated || updateLocationMutation.isPending || isLocationBusy}
-                      className="border-[3px] border-[#17324d] bg-[#8fd3b6] font-black text-[#17324d] shadow-[4px_4px_0_#17324d] hover:bg-[#9ee4c6] disabled:opacity-60"
-                    >
-                      현재 위치 업데이트
-                    </Button>
-                    <Button
-                      onClick={() => void pauseStoredLocationSharing()}
-                      disabled={!hasActiveStoredConsent || pauseSharingMutation.isPending}
-                      variant="outline"
-                      className="border-[3px] border-[#17324d] bg-[#fff7e7] font-black shadow-[4px_4px_0_#8fd3b6] hover:bg-white disabled:opacity-60"
-                    >
-                      <PauseCircle className="mr-2 h-4 w-4" /> 공유 일시 중지
-                    </Button>
-                    <Button
-                      onClick={() => void revokeStoredConsent()}
-                      disabled={!hasActiveStoredConsent || revokeConsentMutation.isPending}
-                      variant="outline"
-                      className="border-[3px] border-[#17324d] bg-[#fff7e7] font-black shadow-[4px_4px_0_#f2a37b] hover:bg-white disabled:opacity-60"
-                    >
-                      동의 철회
-                    </Button>
-                    <Button
-                      onClick={() => void deleteStoredLocationHistory()}
-                      disabled={deleteHistoryMutation.isPending}
-                      variant="outline"
-                      className="border-[3px] border-[#17324d] bg-[#fff0e8] font-black text-[#9d3c23] shadow-[4px_4px_0_#17324d] hover:bg-white disabled:opacity-60"
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" /> 기록 삭제
-                    </Button>
+                    <p className="text-sm font-black">지우가 학교 반경 안에 있어요</p>
+                    <p className="text-xs font-bold text-[#5b6f80]">마지막 업데이트: 방금 전</p>
                   </div>
                 </div>
-              </div>
-              <div className="mt-6 grid gap-3 border-[3px] border-[#fff7e7] bg-[#fff7e7]/10 p-4 text-sm font-bold leading-6 text-[#d9e5df]">
-                <p>
-                  위치 기록 보관 정책: 최신 가족 위치 확인을 위해 좌표 기록은 서버 정책 기준 <strong className="text-[#fff7e7]">{locationRetentionDays}일</strong> 동안 보관하는 것을 전제로 안내합니다. 사용자는 언제든지 공유를 일시 중지하거나 동의를 철회할 수 있습니다.
-                </p>
-                <p>
-                  기록 삭제를 누르면 현재 로그인한 사용자의 저장 좌표가 즉시 삭제되고 가족 위치 목록에서 사라집니다. 동의 철회는 활성 동의 상태를 종료하지만, 별도 삭제 전까지 보관 기간 내 기록이 남을 수 있으므로 민감한 위치 정보는 기록 삭제를 함께 실행하도록 안내합니다.
-                </p>
-              </div>
-              <div className="mt-6 grid gap-4 border-[3px] border-[#fff7e7] bg-[#fff7e7] p-4 text-[#17324d] shadow-[5px_5px_0_#f2a37b]">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="inline-flex items-center gap-2 text-sm font-black"><BellRing className="h-4 w-4" /> 안전 구역 알림</p>
-                    <p className="mt-1 text-xs font-bold text-[#51677a]">지도 중심을 기준으로 반경을 저장하면 이후 위치 업데이트 시 진입·이탈 기록이 남습니다.</p>
-                  </div>
-                  <Button
-                    onClick={() => void toggleGeofenceAlerts()}
-                    disabled={!primaryFamilyId || setAlertSettingMutation.isPending}
-                    variant="outline"
-                    className={`border-[3px] border-[#17324d] font-black shadow-[4px_4px_0_#17324d] ${geofenceAlertsEnabled ? "bg-[#8fd3b6]" : "bg-[#fff0e8] text-[#9d3c23]"}`}
-                  >
-                    {geofenceAlertsEnabled ? "알림 ON" : "알림 OFF"}
-                  </Button>
-                </div>
-
-                <div className="border-t-[3px] border-[#17324d] pt-4">
-                  <p className="mb-3 text-xs font-black">알림 수신 방식</p>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {(["push", "email", "sms"] as const).map(channel => (
-                      <button
-                        key={channel}
-                        onClick={() => void toggleAlertChannel(channel)}
-                        disabled={!primaryFamilyId || setAlertChannelsMutation.isPending}
-                        className={`border-[3px] border-[#17324d] px-3 py-2 text-xs font-black transition-all ${
-                          alertChannels.includes(channel)
-                            ? "bg-[#8fd3b6] shadow-[3px_3px_0_#17324d]"
-                            : "bg-white text-[#51677a] shadow-[2px_2px_0_#17324d]"
-                        } disabled:opacity-60`}
-                      >
-                        {channelLabels[channel]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid gap-3 lg:grid-cols-[1fr_120px]">
-                  <label className="text-xs font-black">
-                    구역 이름
-                    <input
-                      value={safeZoneName}
-                      onChange={event => setSafeZoneName(event.target.value)}
-                      className="mt-2 w-full border-[3px] border-[#17324d] bg-white px-3 py-2 text-sm font-bold outline-none focus:shadow-[3px_3px_0_#8fd3b6]"
-                      placeholder="학교, 집, 학원"
-                    />
-                  </label>
-                  <label className="text-xs font-black">
-                    반경(m)
-                    <input
-                      type="number"
-                      min={30}
-                      max={5000}
-                      value={safeZoneRadius}
-                      onChange={event => setSafeZoneRadius(Math.max(30, Math.min(5000, Number(event.target.value) || 300)))}
-                      className="mt-2 w-full border-[3px] border-[#17324d] bg-white px-3 py-2 text-sm font-bold outline-none focus:shadow-[3px_3px_0_#8fd3b6]"
-                    />
-                  </label>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Button 
-                    onClick={() => {
-                      setIsSelectingZoneLocation(!isSelectingZoneLocation);
-                      if (!isSelectingZoneLocation) {
-                        toast("지도 클릭 모드 활성화", {
-                          description: "지도에서 안전 구역으로 설정할 위치를 클릭하세요.",
-                        });
-                      } else {
-                        toast("지도 클릭 모드 비활성화", {
-                          description: "안전 구역 선택이 취소되었습니다.",
-                        });
-                      }
-                    }} 
-                    variant={isSelectingZoneLocation ? "default" : "outline"} 
-                    className={`border-[3px] border-[#17324d] font-black shadow-[4px_4px_0_#17324d] ${isSelectingZoneLocation ? 'bg-[#f2a37b] text-[#17324d]' : 'bg-[#fff7e7]'} hover:bg-white`}
-                  >
-                    {isSelectingZoneLocation ? '✓ 지도에서 선택 중' : '지도에서 선택'}
-                  </Button>
-                  <Button onClick={useCurrentMapCenterForSafeZone} variant="outline" className="border-[3px] border-[#17324d] bg-[#fff7e7] font-black shadow-[4px_4px_0_#17324d] hover:bg-white">지도 중심 좌표 사용</Button>
-                  <Button onClick={() => void createSafeZone()} disabled={!primaryFamilyId || createSafeZoneMutation.isPending} className="border-[3px] border-[#17324d] bg-[#17324d] font-black text-[#fff7e7] shadow-[4px_4px_0_#8fd3b6] hover:bg-[#254462] disabled:opacity-60">안전 구역 저장</Button>
-                </div>
-                <p className="text-xs font-bold text-[#51677a]">선택 좌표: {safeZoneCenter.lat.toFixed(5)}, {safeZoneCenter.lng.toFixed(5)}</p>
-
-                <div className="grid gap-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-black">등록된 안전 구역</p>
-                    <span className="border-[2px] border-[#17324d] bg-[#8fd3b6] px-2 py-1 text-xs font-black">{safeZones.filter(zone => zone.isActive).length}개</span>
-                  </div>
-                  {safeZonesQuery.isLoading ? (
-                    <p className="text-xs font-bold text-[#51677a]">안전 구역을 불러오는 중입니다.</p>
-                  ) : safeZones.filter(zone => zone.isActive).length === 0 ? (
-                    <p className="border-[2px] border-[#17324d] bg-[#fffdf5] p-3 text-xs font-bold text-[#51677a]">아직 저장된 안전 구역이 없습니다. 지도를 원하는 위치로 이동한 뒤 반경을 저장해주세요.</p>
-                  ) : (
-                    safeZones.filter(zone => zone.isActive).slice(0, 4).map(zone => (
-                      <div key={zone.id} className="grid gap-2 border-[2px] border-[#17324d] bg-[#fffdf5] p-3 text-xs font-bold sm:grid-cols-[1fr_auto] sm:items-center">
-                        <div>
-                          <p className="font-black">{zone.name} · 반경 {zone.radiusMeters}m</p>
-                          <p className="mt-1 text-[#51677a]">좌표 {zone.centerLatitude.toFixed(4)}, {zone.centerLongitude.toFixed(4)} · {zone.alertsEnabled ? "개별 알림 켜짐" : "개별 알림 꺼짐"}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button onClick={() => {
-                            if (confirm(`\'${zone.name}\' 구역을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
-                              void deleteSafeZoneMutation.mutateAsync({ id: zone.id });
-                            }
-                          }} disabled={deleteSafeZoneMutation.isPending} variant="outline" className="h-9 w-9 border-[2px] border-[#17324d] bg-[#fff7e7] p-0 hover:bg-[#ffe8cd]"><Trash2 className="h-4 w-4 text-[#d9534f]" /></Button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <div className="grid gap-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-black">최근 이탈·진입 기록</p>
-                    <span className="border-[2px] border-[#17324d] bg-[#f8d9a8] px-2 py-1 text-xs font-black">{recentLocationAlerts.length}건</span>
-                  </div>
-                  {locationAlertsQuery.isLoading ? (
-                    <p className="text-xs font-bold text-[#51677a]">최근 알림을 불러오는 중입니다.</p>
-                  ) : recentLocationAlerts.length === 0 ? (
-                    <p className="border-[2px] border-[#17324d] bg-[#fffdf5] p-3 text-xs font-bold text-[#51677a]">아직 위치 이탈 기록이 없습니다. 저장된 위치가 안전 구역 경계를 넘을 때 기록됩니다.</p>
-                  ) : (
-                    recentLocationAlerts.map(alert => (
-                      <div key={alert.id} className="grid gap-2 border-[2px] border-[#17324d] bg-[#fffdf5] p-3 text-xs font-bold sm:grid-cols-[1fr_auto] sm:items-center">
-                        <div>
-                          <p className="font-black">{alert.message}</p>
-                          <p className="mt-1 text-[#51677a]">거리 {Math.round(alert.distanceMeters)}m · {new Date(alert.createdAt).toLocaleString()} · {alert.acknowledgedAt ? "확인 완료" : "미확인"}</p>
-                        </div>
-                        {!alert.acknowledgedAt && <Button onClick={() => void acknowledgeLocationAlert(alert.id)} disabled={acknowledgeAlertMutation.isPending} variant="outline" className="h-9 border-[2px] border-[#17324d] bg-[#fff7e7] text-xs font-black hover:bg-white">확인</Button>}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-8 space-y-4">
-                {storedFamilyLocations.length > 0 ? (
-                  storedFamilyLocations.map((member, index) => (
-                    <div key={member.memberId} className="flex items-center justify-between gap-4 border-[3px] border-[#fff7e7] bg-[#fff7e7] p-4 text-[#17324d] shadow-[5px_5px_0_#8fd3b6]">
-                      <div className="flex items-center gap-3">
-                        <span className={`flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-[#17324d] font-black ${index % 3 === 0 ? "bg-[#8fd3b6]" : index % 3 === 1 ? "bg-[#f2a37b]" : "bg-[#f8d9a8]"}`}>{member.displayName.slice(0, 1)}</span>
-                        <div>
-                          <p className="font-black">{member.displayName} · {member.role === "child" ? "자녀" : member.role === "guardian" ? "보호자" : "부모"}</p>
-                          <p className="text-xs font-bold text-[#51677a]">
-                            {member.location ? `동적 지도 마커 표시 중 · 좌표 ${member.location.latitude.toFixed(4)}, ${member.location.longitude.toFixed(4)} · 정확도 ${Math.round(member.location.accuracy ?? 0)}m` : "승인 대기 또는 공유 일시 중지 상태입니다."}
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-xs font-black">{member.location ? new Date(member.location.recordedAt).toLocaleTimeString() : "대기"}</span>
-                    </div>
-                  ))
-                ) : (
-                  children.map(child => (
-                    <div key={child.name} className="flex items-center justify-between gap-4 border-[3px] border-[#fff7e7] bg-[#fff7e7] p-4 text-[#17324d] shadow-[5px_5px_0_#8fd3b6]">
-                      <div className="flex items-center gap-3">
-                        <span className={`flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-[#17324d] font-black ${child.accent === "mint" ? "bg-[#8fd3b6]" : child.accent === "peach" ? "bg-[#f2a37b]" : "bg-[#f8d9a8]"}`}>{child.name[0]}</span>
-                        <div>
-                          <p className="font-black">{child.name} · {child.place}</p>
-                          <p className="text-xs font-bold text-[#51677a]">{child.status}</p>
-                        </div>
-                      </div>
-                      <span className="text-xs font-black">{child.time}</span>
-                    </div>
-                  ))
-                )}
+                <BellRing className="h-6 w-6 text-[#d96d45]" />
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section id="how" className="container py-24">
-          <div className="grid items-center gap-12 lg:grid-cols-[0.95fr_1.05fr]">
-            <div className="relative order-2 lg:order-1">
-              <img src={SAFE_ZONE_IMAGE} alt="안전 구역 지도 패널" className="w-full border-[4px] border-[#17324d] bg-[#fffdf5] shadow-[12px_12px_0_#17324d]" />
-              <img src={CHECKIN_IMAGE} alt="가족 체크인 카드" className="absolute -bottom-12 -right-5 hidden w-[52%] rotate-3 border-[4px] border-[#17324d] bg-[#fffdf5] shadow-[10px_10px_0_#f2a37b] md:block" />
-            </div>
-            <div className="order-1 lg:order-2">
-              <p className="mb-4 inline-block border-[3px] border-[#17324d] bg-[#f8d9a8] px-4 py-2 text-sm font-black shadow-[4px_4px_0_#17324d]">사용 흐름</p>
-              <h2 className="font-display text-4xl leading-tight tracking-[-0.03em] sm:text-5xl">설정은 짧고, 확인은 더 짧게.</h2>
-              <div className="mt-8 space-y-5">
-                {timeline.map((item, index) => (
-                  <div key={item.label} className="relative flex gap-5">
-                    {index !== timeline.length - 1 && <span className="absolute left-[22px] top-12 h-[calc(100%+4px)] w-[3px] bg-[#17324d]" />}
-                    <span className="relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[3px] border-[#17324d] bg-[#8fd3b6] shadow-[4px_4px_0_#17324d]"><item.icon className="h-5 w-5" /></span>
-                    <div className="flex-1 border-[3px] border-[#17324d] bg-[#fffdf5] p-4 shadow-[5px_5px_0_#17324d]">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="font-black">{item.label}</p>
-                        <p className="text-sm font-black text-[#1d8664]">{item.time}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="container pb-24">
-          <div className="grid gap-8 border-[4px] border-[#17324d] bg-[#f2a37b] p-8 shadow-[12px_12px_0_#17324d] lg:grid-cols-[0.95fr_1.05fr] lg:items-start lg:p-12">
-            <div>
-              <p className="mb-4 inline-flex items-center gap-2 border-[3px] border-[#17324d] bg-[#fff7e7] px-4 py-2 text-sm font-black shadow-[4px_4px_0_#17324d]"><LinkIcon className="h-4 w-4" /> 가족 초대</p>
-              <h2 className="font-display text-4xl leading-tight tracking-[-0.03em] sm:text-5xl">가족 초대 링크로 간단히 시작하세요.</h2>
-              <p className="mt-4 max-w-2xl text-base font-bold leading-7 text-[#243e55]">보호자가 24시간 유효한 초대 링크를 만들면 가족 구성원이 로그인 후 바로 같은 가족 그룹에 참여할 수 있습니다. 자녀에게는 위치 공유 권한을, 보호자에게는 위치 보기와 공유 권한을 함께 부여합니다.</p>
-              <div className="mt-6 grid gap-3 text-sm font-black sm:grid-cols-3">
-                <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-3 shadow-[4px_4px_0_#17324d]">만료 시간<br /><span className="text-[#1d8664]">24시간</span></div>
-                <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-3 shadow-[4px_4px_0_#17324d]">초대 대상<br /><span className="text-[#1d8664]">자녀/보호자</span></div>
-                <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-3 shadow-[4px_4px_0_#17324d]">수락 방식<br /><span className="text-[#1d8664]">로그인 후 참여</span></div>
-              </div>
-            </div>
-            <div className="border-[4px] border-[#17324d] bg-[#fff7e7] p-5 shadow-[8px_8px_0_#17324d]">
-              <p className="text-sm font-black text-[#51677a]">초대할 가족 역할</p>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setInviteRole("child")}
-                  className={`border-[3px] border-[#17324d] p-4 text-left font-black shadow-[4px_4px_0_#17324d] transition-all ${inviteRole === "child" ? "bg-[#8fd3b6]" : "bg-[#fffdf5] hover:bg-white"}`}
-                >
-                  자녀
-                  <span className="mt-1 block text-xs font-bold text-[#51677a]">위치 공유 가능</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInviteRole("guardian")}
-                  className={`border-[3px] border-[#17324d] p-4 text-left font-black shadow-[4px_4px_0_#17324d] transition-all ${inviteRole === "guardian" ? "bg-[#8fd3b6]" : "bg-[#fffdf5] hover:bg-white"}`}
-                >
-                  보호자
-                  <span className="mt-1 block text-xs font-bold text-[#51677a]">위치 보기/공유 가능</span>
-                </button>
-              </div>
+      {/* Features preview */}
+      <section className="container py-24">
+        <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
+          <div>
+            <p className="mb-4 inline-block border-[3px] border-[#17324d] bg-[#8fd3b6] px-4 py-2 text-sm font-black shadow-[4px_4px_0_#17324d]">핵심 기능</p>
+            <h2 className="font-display text-4xl leading-tight tracking-[-0.03em] sm:text-5xl">부모가 실제로 자주 확인하는 것만 담았습니다.</h2>
+            <Link href="/features">
               <Button
-                onClick={createFamilyInviteUrl}
-                disabled={createInviteLinkMutation.isPending}
-                className="mt-5 h-14 w-full border-[3px] border-[#17324d] bg-[#17324d] px-7 font-black text-[#fff7e7] shadow-[5px_5px_0_#f2a37b] hover:bg-[#254462] disabled:opacity-70"
+                variant="outline"
+                className="mt-6 border-[3px] border-[#17324d] bg-[#fff7e7] px-5 py-5 font-black shadow-[4px_4px_0_#17324d] hover:bg-white"
               >
-                <UsersRound className="mr-2 h-5 w-5" />{createInviteLinkMutation.isPending ? "초대 링크 생성 중" : "초대 링크 생성"}
+                모든 기능 보기 <ChevronRight className="ml-2 h-4 w-4" />
               </Button>
-              {createdInviteUrl && (
-                <div className="mt-5 space-y-3 border-[3px] border-[#17324d] bg-[#fffdf5] p-4 shadow-[5px_5px_0_#8fd3b6]">
-                  <p className="text-sm font-black">생성된 초대 링크</p>
-                  <div className="grid gap-4 sm:grid-cols-[160px_1fr] sm:items-center">
-                    <div className="flex min-h-[160px] items-center justify-center border-[3px] border-[#17324d] bg-[#fff7e7] p-3 shadow-[4px_4px_0_#17324d]">
-                      {inviteQrCodeUrl ? <img src={inviteQrCodeUrl} alt="가족 초대 QR 코드" className="h-32 w-32" /> : <span className="text-xs font-black text-[#51677a]">QR 생성 중</span>}
-                    </div>
-                    <div>
-                      <div className="break-all border-[3px] border-[#17324d] bg-white p-3 text-xs font-bold text-[#314b62]">{createdInviteUrl}</div>
-                      <p className="mt-2 text-xs font-bold text-[#51677a]">QR 코드는 현재 브라우저에서 생성되며, 링크와 동일하게 24시간 동안 사용할 수 있습니다.</p>
-                    </div>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Button onClick={copyInviteUrl} variant="outline" className="h-12 border-[3px] border-[#17324d] bg-[#fff7e7] font-black shadow-[4px_4px_0_#17324d] hover:bg-white"><Copy className="mr-2 h-4 w-4" />복사</Button>
-                    <Button onClick={shareInviteUrl} variant="outline" className="h-12 border-[3px] border-[#17324d] bg-[#fff7e7] font-black shadow-[4px_4px_0_#17324d] hover:bg-white"><Share2 className="mr-2 h-4 w-4" />공유</Button>
+            </Link>
+          </div>
+          <div className="grid gap-5 md:grid-cols-3">
+            {features.map(feature => (
+              <Card key={feature.title} className="group border-[3px] border-[#17324d] bg-[#fffdf5] shadow-[7px_7px_0_#17324d] transition-all hover:-translate-y-1 hover:shadow-[9px_9px_0_#17324d]">
+                <CardContent className="p-6">
+                  <feature.icon className="mb-5 h-9 w-9 text-[#1d8664]" />
+                  <h3 className="text-xl font-black">{feature.title}</h3>
+                  <p className="mt-3 text-sm font-medium leading-6 text-[#51677a]">{feature.text}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Map preview CTA */}
+      <section className="border-y-[3px] border-[#17324d] bg-[#17324d] py-16 text-[#fff7e7]">
+        <div className="container grid gap-10 lg:grid-cols-[1fr_1fr] items-center">
+          <div>
+            <p className="mb-4 inline-flex items-center gap-2 border-[3px] border-[#fff7e7] bg-[#f2a37b] px-4 py-2 text-sm font-black text-[#17324d] shadow-[4px_4px_0_#fff7e7]">
+              <Radar className="h-4 w-4" /> 실시간 위치 화면
+            </p>
+            <h2 className="font-display text-4xl leading-tight tracking-[-0.03em] sm:text-5xl">
+              지도 위에 안전 구역과 이동 경로를 함께 표시합니다.
+            </h2>
+            <p className="mt-6 text-base font-medium leading-8 text-[#d9e5df]">
+              로그인한 사용자가 위치 정보 제공에 동의하면 서버에 동의 내역과 최신 좌표가 저장되고, 같은 가족 그룹의 구성원 위치가 지도에 표시됩니다.
+            </p>
+            <Link href="/map">
+              <Button className="mt-8 h-14 border-[3px] border-[#fff7e7] bg-[#8fd3b6] px-7 text-base font-black text-[#17324d] shadow-[6px_6px_0_#f2a37b] transition-all hover:translate-x-1 hover:translate-y-1 hover:bg-[#9ee4c6] hover:shadow-[3px_3px_0_#f2a37b]">
+                위치 보기 화면으로 <ChevronRight className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
+          </div>
+          <div className="space-y-4">
+            {children.map(child => (
+              <div key={child.name} className="flex items-center justify-between gap-4 border-[3px] border-[#fff7e7] bg-[#fff7e7] p-4 text-[#17324d] shadow-[5px_5px_0_#8fd3b6]">
+                <div className="flex items-center gap-3">
+                  <span className={`flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-[#17324d] font-black ${child.accent === "mint" ? "bg-[#8fd3b6]" : child.accent === "peach" ? "bg-[#f2a37b]" : "bg-[#f8d9a8]"}`}>
+                    {child.name[0]}
+                  </span>
+                  <div>
+                    <p className="font-black">{child.name} · {child.place}</p>
+                    <p className="text-xs font-bold text-[#51677a]">{child.status}</p>
                   </div>
                 </div>
-              )}
-              <div className="mt-5 border-[3px] border-[#17324d] bg-[#fffdf5] p-4 shadow-[5px_5px_0_#f2a37b]">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-black">활성 초대 링크</p>
-                  <span className="border-[2px] border-[#17324d] bg-[#8fd3b6] px-2 py-1 text-xs font-black">{activeInviteLinks.length}개</span>
-                </div>
-                {familyInviteLinksQuery.isLoading ? (
-                  <p className="mt-3 text-xs font-bold text-[#51677a]">초대 상태를 불러오는 중입니다.</p>
-                ) : activeInviteLinks.length === 0 ? (
-                  <p className="mt-3 text-xs font-bold text-[#51677a]">현재 공유 가능한 활성 초대 링크가 없습니다.</p>
-                ) : (
-                  <div className="mt-3 space-y-2">
-                    {activeInviteLinks.slice(0, 3).map(link => (
-                      <div key={link.id} className="grid gap-2 border-[2px] border-[#17324d] bg-white p-3 text-xs font-bold sm:grid-cols-[1fr_auto] sm:items-center">
-                        <div>
-                          <p className="font-black">{link.role === "guardian" ? "보호자" : "자녀"} 초대 · {new Date(link.expiresAt).toLocaleString()} 만료</p>
-                          <p className="mt-1 text-[#51677a]">상태: pending · 위치 보기 {link.canViewLocation ? "허용" : "미허용"} · 위치 공유 {link.canShareLocation ? "허용" : "미허용"}</p>
-                        </div>
-                        <Button onClick={() => revokeInviteUrl(link.id)} disabled={revokeInviteLinkMutation.isPending} variant="outline" className="h-9 border-[2px] border-[#17324d] bg-[#fff7e7] text-xs font-black hover:bg-white">취소</Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <span className="text-xs font-black">{child.time}</span>
               </div>
-              <Button onClick={() => showDemoToast("앱 설치 안내는 데모에서는 안내 화면만 제공합니다.")} variant="outline" className="mt-4 h-12 w-full border-[3px] border-[#17324d] bg-[#fff7e7] px-7 font-black shadow-[4px_4px_0_#17324d] hover:bg-white"><Smartphone className="mr-2 h-5 w-5" />앱 설치 안내</Button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How to preview */}
+      <section className="container py-24">
+        <div className="grid items-center gap-12 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="relative order-2 lg:order-1">
+            <img
+              src={SAFE_ZONE_IMAGE}
+              alt="안전 구역 지도 패널"
+              className="w-full border-[4px] border-[#17324d] bg-[#fffdf5] shadow-[12px_12px_0_#17324d]"
+            />
+            <img
+              src={CHECKIN_IMAGE}
+              alt="가족 체크인 카드"
+              className="absolute -bottom-12 -right-5 hidden w-[52%] rotate-3 border-[4px] border-[#17324d] bg-[#fffdf5] shadow-[10px_10px_0_#f2a37b] md:block"
+            />
+          </div>
+          <div className="order-1 lg:order-2">
+            <p className="mb-4 inline-block border-[3px] border-[#17324d] bg-[#f8d9a8] px-4 py-2 text-sm font-black shadow-[4px_4px_0_#17324d]">
+              사용 방법
+            </p>
+            <h2 className="font-display text-4xl leading-tight tracking-[-0.03em] sm:text-5xl">
+              아이의 하루를 타임라인으로 확인합니다.
+            </h2>
+            <div className="mt-8 space-y-5">
+              {timeline.map((item, index) => (
+                <div key={item.label} className="relative flex gap-5">
+                  {index !== timeline.length - 1 && (
+                    <span className="absolute left-[22px] top-12 h-[calc(100%+4px)] w-[3px] bg-[#17324d]" />
+                  )}
+                  <span className="relative z-10 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[3px] border-[#17324d] bg-[#8fd3b6] shadow-[4px_4px_0_#17324d]">
+                    <item.icon className="h-5 w-5" />
+                  </span>
+                  <div className="flex-1 border-[3px] border-[#17324d] bg-[#fffdf5] p-4 shadow-[5px_5px_0_#17324d]">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-black">{item.label}</p>
+                      <p className="text-sm font-black text-[#1d8664]">{item.time}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Link href="/how-to">
+              <Button
+                variant="outline"
+                className="mt-8 border-[3px] border-[#17324d] bg-[#fff7e7] px-5 py-5 font-black shadow-[4px_4px_0_#17324d] hover:bg-white"
+              >
+                사용 방법 전체 보기 <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Benefits */}
+      <section className="border-t-[3px] border-[#17324d] bg-[#17324d] py-16 text-[#fff7e7]">
+        <div className="container">
+          <p className="mb-4 inline-block border-[3px] border-[#fff7e7] bg-[#f2a37b] px-4 py-2 text-sm font-black text-[#17324d] shadow-[4px_4px_0_#fff7e7]">
+            왜 핀키즈인가요?
+          </p>
+          <h2 className="mb-12 font-display text-4xl leading-tight tracking-[-0.03em] sm:text-5xl">
+            설계 원칙 세 가지
+          </h2>
+          <div className="grid gap-6 md:grid-cols-3">
+            {benefits.map(b => (
+              <div
+                key={b.title}
+                className="border-[3px] border-[#fff7e7] bg-[#fff7e7]/10 p-6 shadow-[5px_5px_0_#8fd3b6]"
+              >
+                <b.icon className="mb-4 h-8 w-8 text-[#8fd3b6]" />
+                <p className="text-xl font-black">{b.title}</p>
+                <p className="mt-2 text-sm font-medium leading-6 text-[#d9e5df]">{b.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      {!isAuthenticated && (
+        <section className="container py-20">
+          <div className="border-[4px] border-[#17324d] bg-[#f2a37b] p-10 shadow-[12px_12px_0_#17324d] text-center">
+            <h2 className="font-display text-4xl leading-tight tracking-[-0.03em]">
+              지금 바로 시작해보세요.
+            </h2>
+            <p className="mt-4 text-base font-bold text-[#243e55]">
+              소셜 로그인 한 번으로 가족 위치 공유를 시작할 수 있습니다.
+            </p>
+            <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
+              <Button
+                onClick={() => openOnboarding(0)}
+                className="h-14 border-[3px] border-[#17324d] bg-[#17324d] px-10 text-base font-black text-[#fff7e7] shadow-[5px_5px_0_#fff7e7] hover:bg-[#254462]"
+              >
+                소셜 로그인으로 시작
+              </Button>
+              <Link href="/features">
+                <Button
+                  variant="outline"
+                  className="h-14 border-[3px] border-[#17324d] bg-[#fff7e7] px-10 text-base font-black shadow-[5px_5px_0_#17324d] hover:bg-white"
+                >
+                  기능 살펴보기 <ChevronRight className="ml-2 h-5 w-5" />
+                </Button>
+              </Link>
             </div>
           </div>
         </section>
-      </main>
-
-      <footer className="border-t-[3px] border-[#17324d] bg-[#17324d] py-8 text-[#fff7e7]">
-        <div className="container flex flex-col justify-between gap-4 text-sm font-bold md:flex-row md:items-center">
-          <p>아이안심 · 간단한 자녀 위치 공유 서비스 데모</p>
-          <p className="flex items-center gap-2 text-[#d9e5df]"><Clock3 className="h-4 w-4" /> 실제 위치 추적은 사용자 동의와 보안 설계가 필요합니다.</p>
-        </div>
-      </footer>
-
-      {showOnboarding && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#17324d]/72 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
-          <div className="relative grid max-h-[92vh] w-full max-w-5xl overflow-y-auto border-[4px] border-[#17324d] bg-[#fff7e7] shadow-[14px_14px_0_#f2a37b] lg:grid-cols-[0.92fr_1.08fr]">
-            <button
-              type="button"
-              onClick={() => setShowOnboarding(false)}
-              className="absolute right-4 top-4 z-20 flex h-10 w-10 items-center justify-center border-[3px] border-[#17324d] bg-[#fffdf5] shadow-[4px_4px_0_#17324d] transition-transform hover:translate-x-0.5 hover:translate-y-0.5"
-              aria-label="온보딩 닫기"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <aside className="relative min-h-[340px] overflow-hidden border-b-[4px] border-[#17324d] bg-[#17324d] p-8 text-[#fff7e7] lg:border-b-0 lg:border-r-[4px]">
-              <div className="absolute -left-16 top-12 h-52 w-52 rounded-full bg-[#8fd3b6]/35 blur-2xl" />
-              <div className="absolute -right-10 bottom-12 h-52 w-52 rounded-full bg-[#f2a37b]/35 blur-2xl" />
-              <div className="relative z-10 flex h-full flex-col justify-between gap-10">
-                <div>
-                  <div className="mb-8 inline-flex items-center gap-2 border-[3px] border-[#fff7e7] bg-[#8fd3b6] px-4 py-2 text-sm font-black text-[#17324d] shadow-[4px_4px_0_#fff7e7]">
-                    <LockKeyhole className="h-4 w-4" /> 처음 시작 설정
-                  </div>
-                  <h2 className="font-display text-4xl leading-tight tracking-[-0.03em] sm:text-5xl">로그인과 위치 동의를 한 번에 안내합니다.</h2>
-                  <p className="mt-5 text-sm font-medium leading-7 text-[#d9e5df]">위치 공유 서비스는 신뢰가 먼저입니다. 그래서 첫 화면에서 보호자 확인, 가족 역할, 위치 제공 동의 이유를 순서대로 설명합니다.</p>
-                </div>
-
-                <div className="space-y-3">
-                  {onboardingSteps.map((step, index) => (
-                    <button
-                      type="button"
-                      key={step.eyebrow}
-                      onClick={() => setOnboardingStep(index)}
-                      className={`flex w-full items-center gap-3 border-[3px] p-3 text-left text-sm font-black transition-all ${index === onboardingStep ? "border-[#fff7e7] bg-[#f2a37b] text-[#17324d] shadow-[4px_4px_0_#fff7e7]" : "border-[#fff7e7]/40 bg-[#fff7e7]/5 text-[#fff7e7] hover:bg-[#fff7e7]/12"}`}
-                    >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[2px] border-current">{index + 1}</span>
-                      <span>{step.eyebrow}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </aside>
-
-            <section className="p-6 sm:p-8 lg:p-10">
-              <div className="mb-8 h-4 border-[3px] border-[#17324d] bg-[#fffdf5]">
-                <div className="h-full bg-[#8fd3b6] transition-all duration-500" style={{ width: progressWidth }} />
-              </div>
-
-              <div className="mb-6 flex h-16 w-16 rotate-[-3deg] items-center justify-center border-[3px] border-[#17324d] bg-[#f8d9a8] shadow-[5px_5px_0_#17324d]">
-                <CurrentStepIcon className="h-8 w-8" />
-              </div>
-              <p className="mb-3 inline-block border-[3px] border-[#17324d] bg-[#8fd3b6] px-3 py-1 text-xs font-black shadow-[3px_3px_0_#17324d]">{currentStep.eyebrow}</p>
-              <h3 id="onboarding-title" className="font-display text-4xl leading-tight tracking-[-0.03em] sm:text-5xl">{currentStep.title}</h3>
-              <p className="mt-4 max-w-2xl text-base font-medium leading-7 text-[#51677a]">{currentStep.description}</p>
-
-              <div className="mt-8">
-                {onboardingStep === 0 && (
-                  <div className="grid gap-5">
-                    {loading && (
-                      <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-4 text-sm font-black shadow-[4px_4px_0_#8fd3b6]">
-                        로그인 상태를 확인하고 있습니다.
-                      </div>
-                    )}
-                    {error && (
-                      <div className="border-[3px] border-[#17324d] bg-[#fff0e8] p-4 text-sm font-black text-[#9d3c23] shadow-[4px_4px_0_#f2a37b]">
-                        로그인 상태 확인이 잠시 지연되었습니다. 아래 소셜 로그인으로 다시 시작할 수 있습니다.
-                      </div>
-                    )}
-                    {isAuthenticated ? (
-                      <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-5 shadow-[5px_5px_0_#8fd3b6]">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-[#17324d] bg-[#8fd3b6]">
-                            <CheckCircle2 className="h-7 w-7" />
-                          </span>
-                          <div>
-                            <p className="font-black">{user?.name || "보호자"}님, {loginProviderLabel} 계정 로그인이 완료되었습니다.</p>
-                            <p className="text-sm font-bold text-[#51677a]">이제 가족 역할과 위치 정보 제공 동의를 이어서 설정합니다.</p>
-                          </div>
-                        </div>
-                        <Button onClick={goNextStep} className="mt-5 h-14 w-full border-[3px] border-[#17324d] bg-[#17324d] px-6 font-black text-[#fff7e7] shadow-[5px_5px_0_#f2a37b] hover:bg-[#254462]">
-                          다음 단계로 계속 <ChevronRight className="ml-2 h-5 w-5" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <button
-                          type="button"
-                          onClick={() => startSocialLogin("kakao")}
-                          className="flex min-h-20 items-center gap-4 border-[3px] border-[#17324d] bg-[#fee500] p-4 text-left shadow-[5px_5px_0_#17324d] transition-all hover:translate-x-1 hover:translate-y-1 hover:shadow-[3px_3px_0_#17324d]"
-                        >
-                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-[3px] border-[#17324d] bg-[#3c1e1e] text-lg font-black text-[#fee500]">K</span>
-                          <span>
-                            <span className="block text-lg font-black">카카오톡으로 3초 가입</span>
-                            <span className="mt-1 block text-xs font-bold text-[#4c3d0d]">카카오 계정으로 보호자 확인</span>
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => startSocialLogin("google")}
-                          className="flex min-h-20 items-center gap-4 border-[3px] border-[#17324d] bg-[#fffdf5] p-4 text-left shadow-[5px_5px_0_#f2a37b] transition-all hover:translate-x-1 hover:translate-y-1 hover:shadow-[3px_3px_0_#f2a37b]"
-                        >
-                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-[3px] border-[#17324d] bg-white">
-                            <Chrome className="h-6 w-6 text-[#1d8664]" />
-                          </span>
-                          <span>
-                            <span className="block text-lg font-black">구글 계정으로 계속</span>
-                            <span className="mt-1 block text-xs font-bold text-[#51677a]">이메일 입력 없이 바로 로그인</span>
-                          </span>
-                        </button>
-                      </div>
-                    )}
-                    <div className="grid gap-4">
-                      <label className="text-sm font-black" htmlFor="guardian-name">표시할 보호자 이름</label>
-                      <div className="flex flex-1 items-center gap-3 border-[3px] border-[#17324d] bg-[#fffdf5] px-4 py-3 shadow-[4px_4px_0_#17324d]">
-                        <UserRound className="h-5 w-5 text-[#1d8664]" />
-                        <input
-                          id="guardian-name"
-                          value={guardianName}
-                          onChange={event => setGuardianName(event.target.value)}
-                          className="w-full bg-transparent text-base font-black outline-none placeholder:text-[#8ba0ad]"
-                          placeholder="예: 민지 보호자"
-                        />
-                      </div>
-                    </div>
-                    <p className="border-[3px] border-[#17324d] bg-[#fffdf5] p-4 text-sm font-bold leading-6 shadow-[4px_4px_0_#8fd3b6]">실제 계정 세션은 서버 기반 인증으로 관리됩니다. 카카오톡·구글 버튼은 인증 포털로 이동하며, 로그인 후 이 화면으로 돌아와 가족 역할과 위치 동의 흐름을 이어갑니다.</p>
-                  </div>
-                )}
-
-                {onboardingStep === 1 && (
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    {["부모", "조부모", "자녀"].map(role => (
-                      <button
-                        type="button"
-                        key={role}
-                        onClick={() => setFamilyRole(role)}
-                        className={`border-[3px] border-[#17324d] p-5 text-left shadow-[5px_5px_0_#17324d] transition-all hover:-translate-y-1 ${familyRole === role ? "bg-[#8fd3b6]" : "bg-[#fffdf5]"}`}
-                      >
-                        <UsersRound className="mb-4 h-8 w-8 text-[#1d8664]" />
-                        <p className="text-xl font-black">{role}</p>
-                        <p className="mt-2 text-sm font-bold leading-6 text-[#51677a]">{role === "자녀" ? "내 위치를 가족에게 공유합니다." : "아이 위치와 알림을 확인합니다."}</p>
-                      </button>
-                    ))}
-                    <div className="sm:col-span-3">
-                      <Button onClick={goNextStep} className="mt-2 h-14 w-full border-[3px] border-[#17324d] bg-[#17324d] px-6 font-black text-[#fff7e7] shadow-[5px_5px_0_#f2a37b] hover:bg-[#254462]">
-                        {familyRole} 역할로 계속 <ChevronRight className="ml-2 h-5 w-5" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {onboardingStep === 2 && (
-                  <div className="grid gap-5">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-5 shadow-[5px_5px_0_#17324d]">
-                        <ShieldCheck className="mb-4 h-8 w-8 text-[#1d8664]" />
-                        <p className="font-black">동의 전에는 위치를 표시하지 않음</p>
-                        <p className="mt-2 text-sm font-bold leading-6 text-[#51677a]">PinKids는 사용자가 직접 버튼을 누른 뒤에만 브라우저 위치 권한 창을 띄웁니다.</p>
-                      </div>
-                      <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-5 shadow-[5px_5px_0_#f2a37b]">
-                        <LockKeyhole className="mb-4 h-8 w-8 text-[#d96d45]" />
-                        <p className="font-black">거절해도 계속 이용 가능</p>
-                        <p className="mt-2 text-sm font-bold leading-6 text-[#51677a]">권한을 거절해도 가족 그룹 생성과 데모 지도 확인은 계속할 수 있습니다.</p>
-                      </div>
-                    </div>
-
-                    <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-5 shadow-[6px_6px_0_#17324d]">
-                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                        <div className="flex gap-4">
-                          <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[3px] border-[#17324d] ${locationPermission === "granted" ? "bg-[#8fd3b6]" : locationPermission === "blocked" || locationPermission === "unsupported" ? "bg-[#f2a37b]" : "bg-[#f8d9a8]"}`}>
-                            {locationPermission === "granted" ? <CheckCircle2 className="h-7 w-7" /> : <AlertTriangle className="h-7 w-7" />}
-                          </span>
-                          <div>
-                            <p className="text-xs font-black text-[#1d8664]">현재 상태 · {getLocationPermissionStatusLabel(locationPermission)}</p>
-                            <p className="mt-1 text-lg font-black">{locationPanelCopy.title}</p>
-                            <p className="mt-2 text-sm font-bold leading-6 text-[#51677a]">{locationPermissionMessage || locationPanelCopy.description}</p>
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          onClick={checkLocationPermissionAgain}
-                          variant="outline"
-                          className="h-11 shrink-0 border-[3px] border-[#17324d] bg-[#fff7e7] px-4 font-black shadow-[4px_4px_0_#f2a37b] hover:bg-white"
-                          disabled={isLocationBusy}
-                        >
-                          <RotateCcw className="mr-2 h-4 w-4" /> 권한 다시 확인
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="border-[3px] border-[#17324d] bg-[#fff7e7] p-5 shadow-[5px_5px_0_#8fd3b6]">
-                      <p className="mb-3 font-black">위치 권한을 요청하기 전 확인사항</p>
-                      <div className="grid gap-3 md:grid-cols-3">
-                        {LOCATION_PERMISSION_EXPLANATIONS.map(item => (
-                          <div key={item} className="border-[3px] border-[#17324d] bg-[#fffdf5] p-4 text-sm font-bold leading-6 shadow-[3px_3px_0_#17324d]">
-                            {item}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {(showLocationSettingsGuide || locationPermission === "blocked") && (
-                      <div className="border-[3px] border-[#17324d] bg-[#fff0e8] p-5 shadow-[5px_5px_0_#f2a37b]">
-                        <div className="mb-4 flex items-center gap-3">
-                          <Settings className="h-6 w-6 text-[#d96d45]" />
-                          <div>
-                            <p className="font-black">브라우저 설정에서 다시 허용하는 방법</p>
-                            <p className="text-sm font-bold text-[#716052]">설정을 바꾼 뒤 이 화면의 ‘권한 다시 확인’을 눌러주세요.</p>
-                          </div>
-                        </div>
-                        <div className="grid gap-3">
-                          {BROWSER_SETTING_GUIDES.map(guide => (
-                            <div key={guide.environment} className="border-[3px] border-[#17324d] bg-[#fffdf5] p-4 text-sm leading-6 shadow-[3px_3px_0_#17324d]">
-                              <p className="font-black">{guide.environment}</p>
-                              <p className="mt-1 font-bold text-[#51677a]">{guide.steps}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-col gap-3 sm:flex-row">
-                      <Button
-                        onClick={requestLocationConsent}
-                        className="h-14 flex-1 border-[3px] border-[#17324d] bg-[#8fd3b6] px-6 font-black text-[#17324d] shadow-[5px_5px_0_#17324d] hover:bg-[#9ee4c6] disabled:opacity-70"
-                        disabled={isLocationBusy || locationPermission === "blocked" || locationPermission === "unsupported"}
-                      >
-                        {locationPermission === "denied" ? "위치 권한 다시 요청" : "위치 권한 요청하기"}
-                      </Button>
-                      <Button onClick={goNextStep} className="h-14 flex-1 border-[3px] border-[#17324d] bg-[#17324d] px-6 font-black text-[#fff7e7] shadow-[5px_5px_0_#f2a37b] hover:bg-[#254462]">
-                        {locationPermission === "granted" ? "권한 확인 후 계속" : "나중에 설정하고 계속"}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {onboardingStep === 3 && (
-                  <div className="grid gap-4">
-                    <div className="border-[3px] border-[#17324d] bg-[#fffdf5] p-5 shadow-[5px_5px_0_#17324d]">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-[#17324d] bg-[#8fd3b6]"><CheckCircle2 className="h-7 w-7" /></span>
-                        <div>
-                          <p className="font-black">{guardianName || "보호자"}님 설정 완료</p>
-                          <p className="text-sm font-bold text-[#51677a]">역할: {familyRole} · 위치 권한: {getLocationPermissionStatusLabel(locationPermission)} · 저장 상태: {hasActiveStoredConsent ? "동의 저장됨" : "동의 미저장"}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <Button onClick={completeOnboarding} disabled={grantConsentMutation.isPending || updateLocationMutation.isPending} className="h-14 border-[3px] border-[#17324d] bg-[#17324d] px-6 font-black text-[#fff7e7] shadow-[5px_5px_0_#f2a37b] hover:bg-[#254462] disabled:opacity-70">
-                      가족 위치 화면으로 이동
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
-        </div>
       )}
-    </div>
+    </AppLayout>
   );
 }
