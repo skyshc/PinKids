@@ -222,15 +222,7 @@ export default function MapViewPage() {
       streetViewControl: false,
       fullscreenControl: false,
       zoomControl: true,
-      styles: [
-        { elementType: "geometry", stylers: [{ color: "#f6ecd8" }] },
-        { elementType: "labels.text.fill", stylers: [{ color: "#17324d" }] },
-        { elementType: "labels.text.stroke", stylers: [{ color: "#fff7e7" }] },
-        { featureType: "road", elementType: "geometry", stylers: [{ color: "#f0cfaa" }] },
-        { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#17324d" }, { weight: 1.2 }] },
-        { featureType: "water", elementType: "geometry", stylers: [{ color: "#b8d6d2" }] },
-        { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#cbe6ce" }] },
-      ],
+      // styles cannot be used with mapId — custom styling is handled via Cloud Console
     });
     if (storedLocationsWithCoordinates.length > 0) {
       const bounds = new window.google.maps.LatLngBounds();
